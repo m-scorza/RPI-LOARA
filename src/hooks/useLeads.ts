@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { isSupabaseConfigured, localLeads, LEAD_DEFAULTS } from '../lib/localStore'
 import type { Lead, EtapaFunil } from '../types/database'
 
 const ETAPA_DATE_FIELD: Record<EtapaFunil, keyof Lead | null> = {
@@ -35,15 +36,16 @@ export function useLeads(parceiroId: string) {
   const fetchLeads = useCallback(async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('parceiro_id', parceiroId)
-        .order('etapa', { ascending: true })
-        .order('nome_empresa', { ascending: true })
-
-      if (error) throw error
-      setLeads(data || [])
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('leads').select('*').eq('parceiro_id', parceiroId)
+          .order('etapa', { ascending: true }).order('nome_empresa', { ascending: true })
+        if (error) throw error
+        setLeads(data || [])
+      } else {
+        const all = localLeads.selectWhere({ parceiro_id: parceiroId } as Partial<Lead>)
+        setLeads(sortLeads(all))
+      }
     } catch {
       setLeads([])
     } finally {
@@ -53,15 +55,17 @@ export function useLeads(parceiroId: string) {
 
   const createLead = useCallback(async (data: Partial<Lead> & { nome_empresa: string }): Promise<Lead | null> => {
     try {
-      const { data: created, error } = await supabase
-        .from('leads')
-        .insert({ ...data, parceiro_id: parceiroId })
-        .select()
-        .single()
-
-      if (error) throw error
-      setLeads((prev) => sortLeads([...prev, created]))
-      return created
+      if (isSupabaseConfigured) {
+        const { data: created, error } = await supabase
+          .from('leads').insert({ ...data, parceiro_id: parceiroId }).select().single()
+        if (error) throw error
+        setLeads((prev) => sortLeads([...prev, created]))
+        return created
+      } else {
+        const lead = localLeads.insert({ ...LEAD_DEFAULTS, ...data, parceiro_id: parceiroId })
+        setLeads((prev) => sortLeads([...prev, lead]))
+        return lead
+      }
     } catch {
       return null
     }
@@ -69,16 +73,17 @@ export function useLeads(parceiroId: string) {
 
   const updateLead = useCallback(async (id: string, data: Partial<Lead>): Promise<Lead | null> => {
     try {
-      const { data: updated, error } = await supabase
-        .from('leads')
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw error
-      setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
-      return updated
+      if (isSupabaseConfigured) {
+        const { data: updated, error } = await supabase
+          .from('leads').update({ ...data, updated_at: new Date().toISOString() }).eq('id', id).select().single()
+        if (error) throw error
+        setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
+        return updated
+      } else {
+        const updated = localLeads.update(id, data)
+        if (updated) setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
+        return updated
+      }
     } catch {
       return null
     }
@@ -86,12 +91,12 @@ export function useLeads(parceiroId: string) {
 
   const deleteLead = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('leads')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('leads').delete().eq('id', id)
+        if (error) throw error
+      } else {
+        localLeads.delete(id)
+      }
       setLeads((prev) => prev.filter((l) => l.id !== id))
       return true
     } catch {
@@ -106,39 +111,29 @@ export function useLeads(parceiroId: string) {
         etapa: newEtapa,
         updated_at: new Date().toISOString(),
       }
-
       if (dateField && dateField !== 'data_lead') {
         ;(updateData as Record<string, unknown>)[dateField] = new Date().toISOString().split('T')[0]
       }
 
-      const { data: updated, error } = await supabase
-        .from('leads')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single()
-
-      if (error) throw error
-      setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
-      return updated
+      if (isSupabaseConfigured) {
+        const { data: updated, error } = await supabase
+          .from('leads').update(updateData).eq('id', id).select().single()
+        if (error) throw error
+        setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
+        return updated
+      } else {
+        const updated = localLeads.update(id, updateData)
+        if (updated) setLeads((prev) => sortLeads(prev.map((l) => (l.id === id ? updated : l))))
+        return updated
+      }
     } catch {
       return null
     }
   }, [])
 
   useEffect(() => {
-    if (parceiroId) {
-      fetchLeads()
-    }
+    if (parceiroId) fetchLeads()
   }, [parceiroId, fetchLeads])
 
-  return {
-    leads,
-    loading,
-    fetchLeads,
-    createLead,
-    updateLead,
-    deleteLead,
-    moveLead,
-  }
+  return { leads, loading, fetchLeads, createLead, updateLead, deleteLead, moveLead }
 }

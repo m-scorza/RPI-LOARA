@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import { supabase } from '../lib/supabase'
+import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
 import { useAcoes } from '../hooks/useAcoes'
@@ -82,6 +82,7 @@ export default function CondutorRPI() {
   const [entregavelTab, setEntregavelTab] = useState(0)
   const [finalizing, setFinalizing] = useState(false)
 
+  const { getParceiro } = useParceiros()
   const { leads, createLead } = useLeads(parceiroId || '')
   const { rpis, createRPI, updateRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
@@ -89,10 +90,10 @@ export default function CondutorRPI() {
   // Load parceiro data
   useEffect(() => {
     if (!parceiroId) return
-    supabase.from('parceiros').select('*').eq('id', parceiroId).single().then(({ data }) => {
-      setParceiro(data as Parceiro | null)
+    getParceiro(parceiroId).then((data) => {
+      setParceiro(data)
     })
-  }, [parceiroId])
+  }, [parceiroId, getParceiro])
 
   // Load previous pending actions
   useEffect(() => {

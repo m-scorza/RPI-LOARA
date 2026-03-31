@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, AlertTriangle, Clock, Play } from 'lucide-react'
+import { isSupabaseConfigured, localParceiros, localRPIs } from '../lib/localStore'
 import { supabase } from '../lib/supabase'
 import { formatDate } from '../lib/format'
 import type { Parceiro, Categoria, RPI } from '../types/database'
@@ -53,27 +54,44 @@ export default function Agenda() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: parceiros } = await supabase
-        .from('parceiros')
-        .select('*')
-        .eq('status', 'ativo')
-        .in('categoria', ['Prata', 'Ouro'])
-        .order('nome')
+      let parceirosData: Parceiro[]
 
-      if (!parceiros) { setLoading(false); return }
+      if (isSupabaseConfigured) {
+        const { data } = await supabase
+          .from('parceiros')
+          .select('*')
+          .eq('status', 'ativo')
+          .in('categoria', ['Prata', 'Ouro'])
+          .order('nome')
+        parceirosData = (data as Parceiro[]) || []
+      } else {
+        parceirosData = localParceiros.selectAll()
+          .filter((p) => p.status === 'ativo' && ['Prata', 'Ouro'].includes(p.categoria))
+          .sort((a, b) => a.nome.localeCompare(b.nome))
+      }
+
+      if (parceirosData.length === 0) { setLoading(false); return }
 
       const agendaItems: AgendaItem[] = []
 
-      for (const p of parceiros as Parceiro[]) {
-        const { data: rpis } = await supabase
-          .from('rpis')
-          .select('*')
-          .eq('parceiro_id', p.id)
-          .eq('status', 'finalizada')
-          .order('data_reuniao', { ascending: false })
-          .limit(1)
+      for (const p of parceirosData) {
+        let ultimaRPI: RPI | null = null
 
-        const ultimaRPI = rpis && rpis.length > 0 ? rpis[0] as RPI : null
+        if (isSupabaseConfigured) {
+          const { data: rpis } = await supabase
+            .from('rpis')
+            .select('*')
+            .eq('parceiro_id', p.id)
+            .eq('status', 'finalizada')
+            .order('data_reuniao', { ascending: false })
+            .limit(1)
+          ultimaRPI = rpis && rpis.length > 0 ? rpis[0] as RPI : null
+        } else {
+          const rpis = localRPIs.selectWhere({ parceiro_id: p.id } as Partial<RPI>)
+            .filter((r) => r.status === 'finalizada')
+            .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
+          ultimaRPI = rpis[0] || null
+        }
         let proximaDate: string | null = null
         let diasRestantes: number | null = null
         let urgencia: AgendaItem['urgencia'] = 'nunca'

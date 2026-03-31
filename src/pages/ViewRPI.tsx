@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { isSupabaseConfigured, localRPIs } from '../lib/localStore'
 import { supabase } from '../lib/supabase'
 import { formatDate } from '../lib/format'
 import type { RPI } from '../types/database'
@@ -17,10 +18,15 @@ export default function ViewRPI() {
 
   useEffect(() => {
     if (!rpiId) return
-    supabase.from('rpis').select('*').eq('id', rpiId).single().then(({ data }) => {
-      setRPI(data as RPI | null)
+    if (isSupabaseConfigured) {
+      supabase.from('rpis').select('*').eq('id', rpiId).single().then(({ data }) => {
+        setRPI(data as RPI | null)
+        setLoading(false)
+      })
+    } else {
+      setRPI(localRPIs.selectById(rpiId))
       setLoading(false)
-    })
+    }
   }, [rpiId])
 
   if (loading) return <div className="text-center py-12 text-slate-400">Carregando...</div>

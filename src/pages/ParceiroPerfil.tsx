@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Calendar, Users, Building2, FileText } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
 import { formatCurrency, formatDate } from '../lib/format'
@@ -35,18 +35,19 @@ export default function ParceiroPerfil() {
   const [showLeadForm, setShowLeadForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
 
+  const { getParceiro, updateParceiro } = useParceiros()
   const { leads, createLead, moveLead } = useLeads(id || '')
   const { rpis } = useRPIs(id || '')
 
   useEffect(() => {
     async function fetch() {
       if (!id) return
-      const { data } = await supabase.from('parceiros').select('*').eq('id', id).single()
-      setParceiro(data as Parceiro | null)
+      const p = await getParceiro(id)
+      setParceiro(p)
       setLoading(false)
     }
     fetch()
-  }, [id])
+  }, [id, getParceiro])
 
   if (loading) return <div className="text-center py-12 text-slate-400">Carregando...</div>
   if (!parceiro) return <div className="text-center py-12 text-slate-500">Parceiro não encontrado.</div>
@@ -64,13 +65,8 @@ export default function ParceiroPerfil() {
   }
 
   const handleEditSave = async (data: Partial<Parceiro>) => {
-    const { data: updated } = await supabase
-      .from('parceiros')
-      .update({ ...data, updated_at: new Date().toISOString() } as Record<string, unknown>)
-      .eq('id', parceiro.id)
-      .select()
-      .single()
-    if (updated) setParceiro(updated as Parceiro)
+    const updated = await updateParceiro(parceiro.id, data)
+    if (updated) setParceiro(updated)
     setShowEditForm(false)
   }
 
