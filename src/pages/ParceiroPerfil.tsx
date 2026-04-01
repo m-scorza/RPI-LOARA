@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Play, Calendar, Users, Building2, FileText } from 'lucide-react'
+import { ArrowLeft, Play, Calendar, Users, Building2, FileText, Trash2 } from 'lucide-react'
 import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
@@ -34,11 +34,13 @@ export default function ParceiroPerfil() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<TabId>('visao')
   const [showLeadForm, setShowLeadForm] = useState(false)
+  const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [showEditForm, setShowEditForm] = useState(false)
+  const [deletingRPIId, setDeletingRPIId] = useState<string | null>(null)
 
   const { getParceiro, updateParceiro } = useParceiros()
-  const { leads, createLead, moveLead } = useLeads(id || '')
-  const { rpis } = useRPIs(id || '')
+  const { leads, createLead, updateLead, deleteLead, moveLead } = useLeads(id || '')
+  const { rpis, deleteRPI } = useRPIs(id || '')
 
   useEffect(() => {
     async function fetch() {
@@ -61,8 +63,27 @@ export default function ParceiroPerfil() {
   }
 
   const handleCreateLead = async (data: Partial<Lead> & { nome_empresa: string }) => {
-    await createLead({ ...data, parceiro_id: id! })
+    if (editingLead) {
+      await updateLead(editingLead.id, data)
+    } else {
+      await createLead({ ...data, parceiro_id: id! })
+    }
     setShowLeadForm(false)
+    setEditingLead(null)
+  }
+
+  const handleDeleteLead = async (leadId: string) => {
+    await deleteLead(leadId)
+  }
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead)
+    setShowLeadForm(true)
+  }
+
+  const handleDeleteRPI = async (rpiId: string) => {
+    await deleteRPI(rpiId)
+    setDeletingRPIId(null)
   }
 
   const handleEditSave = async (data: Partial<Parceiro>) => {
@@ -168,7 +189,9 @@ export default function ParceiroPerfil() {
         <PipelineKanban
           leads={leads}
           onMove={handleMoveLead}
-          onAddLead={() => setShowLeadForm(true)}
+          onEditLead={handleEditLead}
+          onDeleteLead={handleDeleteLead}
+          onAddLead={() => { setEditingLead(null); setShowLeadForm(true) }}
         />
       )}
 
@@ -186,20 +209,46 @@ export default function ParceiroPerfil() {
               {rpis.map((rpi) => (
                 <div
                   key={rpi.id}
-                  onClick={() => navigate(`/parceiros/${id}/rpi/${rpi.id}`)}
                   className="flex items-center justify-between px-6 py-4 hover:bg-slate-50 cursor-pointer"
+                  onClick={() => navigate(`/parceiros/${id}/rpi/${rpi.id}`)}
                 >
                   <div>
                     <span className="text-sm font-medium text-slate-800">RPI #{rpi.numero_sequencial}</span>
                     <span className="text-sm text-slate-500 ml-3">{formatDate(rpi.data_reuniao)}</span>
                   </div>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    rpi.status === 'finalizada' ? 'bg-emerald-100 text-emerald-700' :
-                    rpi.status === 'em_andamento' ? 'bg-blue-100 text-blue-700' :
-                    'bg-slate-100 text-slate-500'
-                  }`}>
-                    {rpi.status === 'finalizada' ? 'Finalizada' : rpi.status === 'em_andamento' ? 'Em andamento' : 'Cancelada'}
-                  </span>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      rpi.status === 'finalizada' ? 'bg-emerald-100 text-emerald-700' :
+                      rpi.status === 'em_andamento' ? 'bg-blue-100 text-blue-700' :
+                      'bg-slate-100 text-slate-500'
+                    }`}>
+                      {rpi.status === 'finalizada' ? 'Finalizada' : rpi.status === 'em_andamento' ? 'Em andamento' : 'Cancelada'}
+                    </span>
+                    {deletingRPIId === rpi.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleDeleteRPI(rpi.id)}
+                          className="px-2 py-1 text-xs font-medium text-white bg-rose-500 rounded hover:bg-rose-600"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => setDeletingRPIId(null)}
+                          className="px-2 py-1 text-xs font-medium text-slate-500 bg-slate-100 rounded hover:bg-slate-200"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeletingRPIId(rpi.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                        title="Excluir RPI"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -233,7 +282,7 @@ export default function ParceiroPerfil() {
       })()}
 
       {showLeadForm && (
-        <LeadForm onClose={() => setShowLeadForm(false)} onSave={handleCreateLead} />
+        <LeadForm lead={editingLead} onClose={() => { setShowLeadForm(false); setEditingLead(null) }} onSave={handleCreateLead} />
       )}
       {showEditForm && (
         <ParceiroForm parceiro={parceiro} onClose={() => setShowEditForm(false)} onSave={handleEditSave} />

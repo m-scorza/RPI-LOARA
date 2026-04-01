@@ -76,6 +76,21 @@ export function useRPIs(parceiroId: string) {
     }
   }, [])
 
+  const deleteRPI = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      if (isSupabaseConfigured) {
+        const { error } = await supabase.from('rpis').delete().eq('id', id)
+        if (error) throw error
+      } else {
+        localRPIs.delete(id)
+      }
+      setRpis((prev) => prev.filter((r) => r.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   const getLastRPI = useCallback(async (): Promise<RPI | null> => {
     try {
       if (isSupabaseConfigured) {
@@ -99,5 +114,5 @@ export function useRPIs(parceiroId: string) {
     if (parceiroId) fetchRPIs()
   }, [parceiroId, fetchRPIs])
 
-  return { rpis, loading, fetchRPIs, createRPI, updateRPI, getLastRPI }
+  return { rpis, loading, fetchRPIs, createRPI, updateRPI, deleteRPI, getLastRPI }
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Users } from 'lucide-react'
+import { Plus, Search, Users, Pencil, Trash2 } from 'lucide-react'
 import { useParceiros } from '../hooks/useParceiros'
 import type { Parceiro, Categoria } from '../types/database'
 import EmptyState from '../components/EmptyState'
@@ -19,11 +19,12 @@ const STATUS_STYLES: Record<string, string> = {
 }
 
 export default function ParceirosLista() {
-  const { parceiros, loading, createParceiro, updateParceiro } = useParceiros()
+  const { parceiros, loading, createParceiro, updateParceiro, deleteParceiro } = useParceiros()
   const [showForm, setShowForm] = useState(false)
   const [editingParceiro, setEditingParceiro] = useState<Parceiro | null>(null)
   const [filterCategoria, setFilterCategoria] = useState<Categoria | 'Todos'>('Todos')
   const [search, setSearch] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const navigate = useNavigate()
 
   const filtered = parceiros.filter((p) => {
@@ -40,6 +41,11 @@ export default function ParceirosLista() {
     }
     setShowForm(false)
     setEditingParceiro(null)
+  }
+
+  const handleDelete = async (id: string) => {
+    await deleteParceiro(id)
+    setDeletingId(null)
   }
 
   return (
@@ -120,6 +126,7 @@ export default function ParceirosLista() {
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Região</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Contato</th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                <th className="text-right px-6 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -143,6 +150,41 @@ export default function ParceirosLista() {
                     <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[p.status]}`}>
                       {p.status}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => { setEditingParceiro(p); setShowForm(true) }}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                        title="Editar"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      {deletingId === p.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="px-2 py-1 text-xs font-medium text-white bg-rose-500 rounded hover:bg-rose-600"
+                          >
+                            Confirmar
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(null)}
+                            className="px-2 py-1 text-xs font-medium text-slate-500 bg-slate-100 rounded hover:bg-slate-200"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingId(p.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

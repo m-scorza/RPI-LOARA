@@ -8,7 +8,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { GripVertical, Clock, Plus } from 'lucide-react'
+import { GripVertical, Clock, Plus, Trash2, Pencil } from 'lucide-react'
 import type { Lead, EtapaFunil } from '../types/database'
 import { ETAPAS_FUNIL, ETAPA_NEXT, ETAPA_PREV } from '../types/database'
 import { formatCurrency } from '../lib/format'
@@ -18,6 +18,8 @@ interface PipelineKanbanProps {
   leads: Lead[]
   onMove?: (leadId: string, newEtapa: EtapaFunil) => Promise<void>
   onClickLead?: (lead: Lead) => void
+  onDeleteLead?: (leadId: string) => void
+  onEditLead?: (lead: Lead) => void
   onAddLead?: () => void
   readOnly?: boolean
 }
@@ -45,16 +47,63 @@ function daysInStage(lead: Lead): number {
   return Math.floor((Date.now() - new Date(entered).getTime()) / (1000 * 60 * 60 * 24))
 }
 
-function LeadCardContent({ lead, compact }: { lead: Lead; compact?: boolean }) {
+function LeadCardContent({ lead, compact, onEdit, onDelete }: {
+  lead: Lead
+  compact?: boolean
+  onEdit?: (lead: Lead) => void
+  onDelete?: (leadId: string) => void
+}) {
   const days = daysInStage(lead)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
   return (
-    <div className={`bg-white rounded-lg border border-slate-200 p-3 shadow-sm ${compact ? '' : 'hover:shadow-md transition-shadow'}`}>
+    <div className={`bg-white rounded-lg border border-slate-200 p-3 shadow-sm group ${compact ? '' : 'hover:shadow-md transition-shadow'}`}>
       <div className="flex items-start gap-2">
         {!compact && (
           <GripVertical size={14} className="text-slate-300 mt-0.5 shrink-0 cursor-grab" />
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-800 truncate">{lead.nome_empresa}</p>
+          <div className="flex items-start justify-between gap-1">
+            <p className="text-sm font-medium text-slate-800 truncate">{lead.nome_empresa}</p>
+            {(onEdit || onDelete) && !confirmDelete && (
+              <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+                {onEdit && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onEdit(lead) }}
+                    className="p-1 rounded text-slate-400 hover:text-teal-600 hover:bg-teal-50"
+                    title="Editar"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setConfirmDelete(true) }}
+                    className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                    title="Excluir"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {confirmDelete && (
+            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => { onDelete?.(lead.id); setConfirmDelete(false) }}
+                className="px-2 py-0.5 text-xs font-medium text-white bg-rose-500 rounded hover:bg-rose-600"
+              >
+                Excluir
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-0.5 text-xs font-medium text-slate-500 bg-slate-100 rounded hover:bg-slate-200"
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
           {lead.demanda && (
             <p className="text-xs text-slate-500 mt-0.5">{formatCurrency(lead.demanda)}</p>
           )}
@@ -79,7 +128,12 @@ function LeadCardContent({ lead, compact }: { lead: Lead; compact?: boolean }) {
   )
 }
 
-function DraggableCard({ lead, onClick }: { lead: Lead; onClick?: () => void }) {
+function DraggableCard({ lead, onClick, onEdit, onDelete }: {
+  lead: Lead
+  onClick?: () => void
+  onEdit?: (lead: Lead) => void
+  onDelete?: (leadId: string) => void
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: lead.id,
     data: { lead },
@@ -93,7 +147,7 @@ function DraggableCard({ lead, onClick }: { lead: Lead; onClick?: () => void }) 
       onClick={onClick}
       className={`${isDragging ? 'opacity-30' : ''} cursor-pointer`}
     >
-      <LeadCardContent lead={lead} />
+      <LeadCardContent lead={lead} onEdit={onEdit} onDelete={onDelete} />
     </div>
   )
 }
@@ -102,6 +156,8 @@ function DroppableColumn({
   etapa,
   leads,
   onClickLead,
+  onEditLead,
+  onDeleteLead,
   onAddLead,
   readOnly,
   isFirst,
@@ -109,6 +165,8 @@ function DroppableColumn({
   etapa: EtapaFunil
   leads: Lead[]
   onClickLead?: (lead: Lead) => void
+  onEditLead?: (lead: Lead) => void
+  onDeleteLead?: (leadId: string) => void
   onAddLead?: () => void
   readOnly?: boolean
   isFirst: boolean
@@ -142,7 +200,7 @@ function DroppableColumn({
               <LeadCardContent lead={lead} compact />
             </div>
           ) : (
-            <DraggableCard key={lead.id} lead={lead} onClick={() => onClickLead?.(lead)} />
+            <DraggableCard key={lead.id} lead={lead} onClick={() => onClickLead?.(lead)} onEdit={onEditLead} onDelete={onDeleteLead} />
           )
         )}
         {leads.length === 0 && (
@@ -162,7 +220,7 @@ function DroppableColumn({
   )
 }
 
-export default function PipelineKanban({ leads, onMove, onClickLead, onAddLead, readOnly = false }: PipelineKanbanProps) {
+export default function PipelineKanban({ leads, onMove, onClickLead, onDeleteLead, onEditLead, onAddLead, readOnly = false }: PipelineKanbanProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
 
   const leadsByEtapa = ETAPAS_FUNIL.reduce<Record<EtapaFunil, Lead[]>>((acc, etapa) => {
@@ -224,6 +282,8 @@ export default function PipelineKanban({ leads, onMove, onClickLead, onAddLead, 
             etapa={etapa}
             leads={leadsByEtapa[etapa]}
             onClickLead={onClickLead}
+            onEditLead={onEditLead}
+            onDeleteLead={onDeleteLead}
             onAddLead={onAddLead}
             isFirst={i === 0}
           />
