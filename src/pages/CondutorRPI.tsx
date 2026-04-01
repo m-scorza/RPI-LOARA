@@ -8,6 +8,7 @@ import { useRPIs } from '../hooks/useRPIs'
 import { useAcoes } from '../hooks/useAcoes'
 import { formatCurrency, formatDate } from '../lib/format'
 import { generateHubSpotText, generatePlanoAcaoText, generateRelatorioText } from '../lib/generators'
+import { calculateRevenueProjection } from '../lib/revenueEngine'
 import type { Parceiro, Acao, Responsavel, Prioridade, CategoriaAcao } from '../types/database'
 import { ETAPAS_FUNIL } from '../types/database'
 import PipelineKanban from '../components/PipelineKanban'
@@ -283,23 +284,41 @@ export default function CondutorRPI() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
 
         {/* BLOCK 0: Preparação */}
-        {currentBlock === 0 && (
+        {currentBlock === 0 && (() => {
+          const proj = calculateRevenueProjection(parceiro)
+          const activeLeads = leads.filter((l) => l.status === 'Ativo')
+          return (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Preparação — {parceiro.nome}</h2>
             <p className="text-sm text-slate-500">Revise as informações antes de iniciar a reunião.</p>
 
-            <div className="grid grid-cols-3 gap-4">
+            {/* Revenue goal narrative */}
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <strong>{parceiro.nome}</strong> quer gerar{' '}
+                <strong className="text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}/mês</strong> em receita
+                ({formatCurrency(proj.metaReceitaAnual)}/ano).
+                Para isso, precisa indicar <strong>{proj.leadsNecessariosMensal} leads/mês</strong> e
+                fechar <strong>{proj.clientesNecessariosMensal} clientes/mês</strong>.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-4 gap-4">
+              <div className="bg-slate-50 rounded-xl p-4">
+                <p className="text-xs text-slate-500 mb-1">Meta Receita/Mês</p>
+                <p className="text-xl font-bold text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}</p>
+              </div>
+              <div className="bg-slate-50 rounded-xl p-4">
+                <p className="text-xs text-slate-500 mb-1">Leads Necessários/Mês</p>
+                <p className="text-xl font-bold text-slate-800">{proj.leadsNecessariosMensal}</p>
+              </div>
               <div className="bg-slate-50 rounded-xl p-4">
                 <p className="text-xs text-slate-500 mb-1">Leads Ativos</p>
-                <p className="text-xl font-bold text-slate-800">{leads.filter((l) => l.status === 'Ativo').length}</p>
+                <p className="text-xl font-bold text-slate-800">{activeLeads.length}</p>
               </div>
               <div className="bg-slate-50 rounded-xl p-4">
                 <p className="text-xs text-slate-500 mb-1">Pipeline</p>
-                <p className="text-xl font-bold text-slate-800">{formatCurrency(leads.filter((l) => l.status === 'Ativo').reduce((s, l) => s + (l.demanda || 0), 0))}</p>
-              </div>
-              <div className="bg-slate-50 rounded-xl p-4">
-                <p className="text-xs text-slate-500 mb-1">RPIs Anteriores</p>
-                <p className="text-xl font-bold text-slate-800">{rpis.filter((r) => r.status === 'finalizada').length}</p>
+                <p className="text-xl font-bold text-slate-800">{formatCurrency(activeLeads.reduce((s, l) => s + (l.demanda || 0), 0))}</p>
               </div>
             </div>
 
@@ -320,7 +339,8 @@ export default function CondutorRPI() {
               </button>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* BLOCK 2: Dúvidas e Dificuldades */}
         {currentBlock === 2 && (
@@ -405,12 +425,18 @@ export default function CondutorRPI() {
         )}
 
         {/* BLOCK 4: Futuras Indicações */}
-        {currentBlock === 4 && (
+        {currentBlock === 4 && (() => {
+          const proj = calculateRevenueProjection(parceiro)
+          return (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Futuras Indicações</h2>
 
-            <div className="bg-teal-50 rounded-xl p-4">
-              <p className="text-sm text-teal-700">Leads indicados nesta RPI: <strong>{newLeads.length}</strong></p>
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
+              <p className="text-sm text-slate-700">
+                Para atingir <strong className="text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}/mês</strong>,
+                você precisa indicar <strong>{proj.leadsNecessariosMensal} leads/mês</strong>.
+              </p>
+              <p className="text-sm text-teal-700 mt-2">Leads indicados nesta RPI: <strong>{newLeads.length}</strong></p>
             </div>
 
             {/* Quick add form */}
@@ -446,7 +472,8 @@ export default function CondutorRPI() {
               <textarea value={indicacoesCompromisso} onChange={(e) => setIndicacoesCompromisso(e.target.value)} rows={3} className={inputCls} placeholder='Ex: "Vai indicar 5 empresas da região de Limeira"' />
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* BLOCK 5: Plano de Ação */}
         {currentBlock === 5 && (

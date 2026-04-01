@@ -94,6 +94,7 @@ export const PARCEIRO_DEFAULTS: Partial<Parceiro> = {
   meta_anual_credito: 10000000,
   meta_anual_clientes: 12,
   tiquete_medio: 800000,
+  meta_receita_mensal: 20000,
   conv_lead_qualificado: 0.60,
   conv_qualificado_oportunidade: 0.50,
   conv_oportunidade_cliente: 0.65,

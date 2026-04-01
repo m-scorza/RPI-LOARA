@@ -5,6 +5,7 @@ import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
 import { formatCurrency, formatDate } from '../lib/format'
+import { calculateRevenueProjection } from '../lib/revenueEngine'
 import type { Parceiro, Lead, Categoria, EtapaFunil } from '../types/database'
 import PipelineKanban from '../components/PipelineKanban'
 import LeadForm from '../components/LeadForm'
@@ -114,12 +115,29 @@ export default function ParceiroPerfil() {
       </div>
 
       {/* Tab Content */}
-      {tab === 'visao' && (
+      {tab === 'visao' && (() => {
+        const proj = calculateRevenueProjection(parceiro)
+        return (
         <div className="space-y-6">
+          {/* Revenue narrative */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
+            <p className="text-sm text-slate-700 leading-relaxed">
+              <strong>{parceiro.nome}</strong> quer gerar{' '}
+              <strong className="text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}/mês</strong> em receita.
+              Para isso, precisa indicar <strong>{proj.leadsNecessariosMensal} leads/mês</strong> e
+              fechar <strong>{proj.clientesNecessariosMensal} clientes/mês</strong> ({formatCurrency(proj.creditoNecessarioMensal)}/mês em crédito).
+            </p>
+          </div>
+
           <div className="grid grid-cols-4 gap-4">
             <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-xs text-slate-500 mb-1">Leads Ativos</p>
-              <p className="text-2xl font-bold text-slate-800">{activeLeads.length}</p>
+              <p className="text-xs text-slate-500 mb-1">Meta Receita/Mês</p>
+              <p className="text-2xl font-bold text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <p className="text-xs text-slate-500 mb-1">Leads Necessários/Mês</p>
+              <p className="text-2xl font-bold text-slate-800">{proj.leadsNecessariosMensal}</p>
+              <p className="text-xs text-slate-400">ativos: {activeLeads.length}</p>
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-xs text-slate-500 mb-1">Pipeline Total</p>
@@ -128,10 +146,6 @@ export default function ParceiroPerfil() {
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <p className="text-xs text-slate-500 mb-1">RPIs Realizadas</p>
               <p className="text-2xl font-bold text-slate-800">{rpis.filter((r) => r.status === 'finalizada').length}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4">
-              <p className="text-xs text-slate-500 mb-1">Meta Anual Crédito</p>
-              <p className="text-2xl font-bold text-slate-800">{formatCurrency(parceiro.meta_anual_credito)}</p>
             </div>
           </div>
 
@@ -147,7 +161,8 @@ export default function ParceiroPerfil() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {tab === 'pipeline' && (
         <PipelineKanban
@@ -192,7 +207,9 @@ export default function ParceiroPerfil() {
         </div>
       )}
 
-      {tab === 'config' && (
+      {tab === 'config' && (() => {
+        const proj = calculateRevenueProjection(parceiro)
+        return (
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Configuração do Parceiro</h3>
@@ -201,15 +218,19 @@ export default function ParceiroPerfil() {
             </button>
           </div>
           <div className="grid grid-cols-3 gap-4 text-sm">
-            <div><span className="text-slate-400">Meta Crédito:</span> <span className="text-slate-700 ml-1">{formatCurrency(parceiro.meta_anual_credito)}</span></div>
-            <div><span className="text-slate-400">Meta Clientes:</span> <span className="text-slate-700 ml-1">{parceiro.meta_anual_clientes}</span></div>
+            <div><span className="text-slate-400">Meta Receita/Mês:</span> <span className="text-emerald-700 font-semibold ml-1">{formatCurrency(proj.metaReceitaMensal)}</span></div>
+            <div><span className="text-slate-400">Crédito Necessário/Mês:</span> <span className="text-slate-700 ml-1">{formatCurrency(proj.creditoNecessarioMensal)}</span></div>
+            <div><span className="text-slate-400">Clientes/Mês:</span> <span className="text-slate-700 ml-1">{proj.clientesNecessariosMensal}</span></div>
+            <div><span className="text-slate-400">Leads/Mês:</span> <span className="text-slate-700 ml-1">{proj.leadsNecessariosMensal}</span></div>
             <div><span className="text-slate-400">Tíquete Médio:</span> <span className="text-slate-700 ml-1">{formatCurrency(parceiro.tiquete_medio)}</span></div>
+            <div><span className="text-slate-400">Comissão Líquida:</span> <span className="text-slate-700 ml-1">{(proj.comissaoLiquida * 100).toFixed(4)}%</span></div>
             <div><span className="text-slate-400">Conv. Lead→Qualif.:</span> <span className="text-slate-700 ml-1">{(parceiro.conv_lead_qualificado * 100).toFixed(0)}%</span></div>
             <div><span className="text-slate-400">Conv. Qualif.→Oport.:</span> <span className="text-slate-700 ml-1">{(parceiro.conv_qualificado_oportunidade * 100).toFixed(0)}%</span></div>
             <div><span className="text-slate-400">Conv. Oport.→Cliente:</span> <span className="text-slate-700 ml-1">{(parceiro.conv_oportunidade_cliente * 100).toFixed(0)}%</span></div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {showLeadForm && (
         <LeadForm onClose={() => setShowLeadForm(false)} onSave={handleCreateLead} />

@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { X, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { X, ChevronDown, ChevronRight, TrendingUp } from 'lucide-react'
 import type { Parceiro, Categoria } from '../types/database'
+import { calculateRevenueProjection } from '../lib/revenueEngine'
+import { formatCurrency } from '../lib/format'
 
 interface ParceiroFormProps {
   parceiro?: Parceiro | null
@@ -18,6 +20,7 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
     contato_telefone: parceiro?.contato_telefone || '',
     contato_email: parceiro?.contato_email || '',
     data_onboarding: parceiro?.data_onboarding || '',
+    meta_receita_mensal: parceiro?.meta_receita_mensal ?? 20000,
     meta_anual_credito: parceiro?.meta_anual_credito ?? 10000000,
     meta_anual_clientes: parceiro?.meta_anual_clientes ?? 12,
     tiquete_medio: parceiro?.tiquete_medio ?? 800000,
@@ -39,12 +42,34 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
 
   const set = (field: string, value: string | number) => setForm((f) => ({ ...f, [field]: value }))
 
+  // Live revenue projection based on current form values
+  const projection = useMemo(() => {
+    const fakeParceiro = {
+      ...form,
+      meta_receita_mensal: form.meta_receita_mensal,
+    } as Parceiro
+    return calculateRevenueProjection(fakeParceiro)
+  }, [
+    form.meta_receita_mensal,
+    form.comissao_bruta,
+    form.imposto_comissao,
+    form.tiquete_medio,
+    form.conv_lead_qualificado,
+    form.conv_qualificado_oportunidade,
+    form.conv_oportunidade_cliente,
+    form.conv_cliente_doc,
+    form.conv_doc_credito,
+  ])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.nome.trim()) return
     setSaving(true)
     await onSave({
       ...form,
+      // Auto-calculate credit goal from revenue goal
+      meta_anual_credito: projection.creditoNecessarioAnual,
+      meta_anual_clientes: projection.clientesNecessariosAnual,
       regiao: form.regiao || null,
       cnpj_parceiro: form.cnpj_parceiro || null,
       contato_nome: form.contato_nome || null,
@@ -126,6 +151,56 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
             </div>
           </div>
 
+          {/* META DE RECEITA — the main input */}
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-5 border border-emerald-200">
+            <div className="flex items-center gap-2 mb-3">
+              <TrendingUp size={18} className="text-emerald-600" />
+              <h3 className="text-sm font-semibold text-emerald-700 uppercase tracking-wider">Meta de Receita</h3>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className={labelCls}>Receita Mensal Desejada (R$)</label>
+                <input
+                  type="number"
+                  value={form.meta_receita_mensal}
+                  onChange={(e) => set('meta_receita_mensal', Number(e.target.value))}
+                  className={inputCls + ' text-lg font-semibold'}
+                  step="1000"
+                />
+              </div>
+              <div className="flex items-end">
+                <div className="bg-white rounded-lg px-4 py-2 border border-emerald-200 w-full">
+                  <p className="text-xs text-slate-500">Receita Anual</p>
+                  <p className="text-lg font-bold text-emerald-700">{formatCurrency(projection.metaReceitaAnual)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Live projection preview */}
+            <div className="bg-white/70 rounded-lg p-4 space-y-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Para atingir essa meta, você precisa:</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-center">
+                  <p className="text-xl font-bold text-slate-800">{formatCurrency(projection.creditoNecessarioMensal)}</p>
+                  <p className="text-xs text-slate-500">crédito/mês</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-slate-800">{projection.clientesNecessariosMensal}</p>
+                  <p className="text-xs text-slate-500">clientes/mês</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-slate-800">{projection.leadsNecessariosMensal}</p>
+                  <p className="text-xs text-slate-500">leads/mês</p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-400 mt-2 text-center">
+                Conversão geral do funil: {(projection.conversaoGeralLeadCliente * 100).toFixed(1)}% &middot;
+                Tíquete médio: {formatCurrency(form.tiquete_medio)} &middot;
+                Comissão líquida: {(projection.comissaoLiquida * 100).toFixed(4)}%
+              </p>
+            </div>
+          </div>
+
           {/* Parâmetros Financeiros */}
           <div>
             <button
@@ -138,14 +213,6 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
             </button>
             {showFinanceiro && (
               <div className="grid grid-cols-3 gap-4 mt-3">
-                <div>
-                  <label className={labelCls}>Meta Anual Crédito (R$)</label>
-                  <input type="number" value={form.meta_anual_credito} onChange={(e) => set('meta_anual_credito', Number(e.target.value))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Meta Anual Clientes</label>
-                  <input type="number" value={form.meta_anual_clientes} onChange={(e) => set('meta_anual_clientes', Number(e.target.value))} className={inputCls} />
-                </div>
                 <div>
                   <label className={labelCls}>Tíquete Médio (R$)</label>
                   <input type="number" value={form.tiquete_medio} onChange={(e) => set('tiquete_medio', Number(e.target.value))} className={inputCls} />
@@ -161,6 +228,10 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
                 <div>
                   <label className={labelCls}>Imposto Comissão</label>
                   <input type="number" step="0.0001" value={form.imposto_comissao} onChange={(e) => set('imposto_comissao', Number(e.target.value))} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Tempo Médio Fechamento (dias)</label>
+                  <input type="number" value={form.tempo_medio_fechamento} onChange={(e) => set('tempo_medio_fechamento', Number(e.target.value))} className={inputCls} />
                 </div>
               </div>
             )}
@@ -197,10 +268,6 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
                 <div>
                   <label className={labelCls}>Conv. Doc. → Crédito</label>
                   <input type="number" step="0.01" min="0" max="1" value={form.conv_doc_credito} onChange={(e) => set('conv_doc_credito', Number(e.target.value))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Tempo Médio Fechamento (dias)</label>
-                  <input type="number" value={form.tempo_medio_fechamento} onChange={(e) => set('tempo_medio_fechamento', Number(e.target.value))} className={inputCls} />
                 </div>
               </div>
             )}
