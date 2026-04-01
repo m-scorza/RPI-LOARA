@@ -28,6 +28,7 @@ CREATE TABLE parceiros (
   conv_cliente_doc DECIMAL(4,2) DEFAULT 0.80,
   conv_doc_credito DECIMAL(4,2) DEFAULT 0.85,
   tempo_medio_fechamento INTEGER DEFAULT 120,
+  meta_receita_mensal DECIMAL(15,2) DEFAULT 20000,
 
   status TEXT DEFAULT 'ativo' CHECK (status IN ('ativo', 'inativo', 'churned')),
   notas TEXT,
@@ -217,3 +218,30 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) r ON TRUE
 WHERE p.status = 'ativo' AND p.categoria IN ('Prata', 'Ouro');
+
+-- Conversão real do funil por parceiro
+CREATE VIEW vw_conversao_funil AS
+SELECT
+  parceiro_id,
+  CASE WHEN COUNT(*) = 0 THEN NULL
+    ELSE COUNT(*) FILTER (WHERE etapa IN ('Lead Qualificado','Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado'))::DECIMAL / COUNT(*)
+  END AS conv_lead_qualificado,
+  CASE WHEN COUNT(*) FILTER (WHERE etapa IN ('Lead Qualificado','Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado')) = 0 THEN NULL
+    ELSE COUNT(*) FILTER (WHERE etapa IN ('Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado'))::DECIMAL
+      / COUNT(*) FILTER (WHERE etapa IN ('Lead Qualificado','Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado'))
+  END AS conv_qualificado_oportunidade,
+  CASE WHEN COUNT(*) FILTER (WHERE etapa IN ('Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado')) = 0 THEN NULL
+    ELSE COUNT(*) FILTER (WHERE etapa IN ('Cliente','Doc. Consolidada','Crédito Tomado'))::DECIMAL
+      / COUNT(*) FILTER (WHERE etapa IN ('Oportunidade','Cliente','Doc. Consolidada','Crédito Tomado'))
+  END AS conv_oportunidade_cliente,
+  CASE WHEN COUNT(*) FILTER (WHERE etapa IN ('Cliente','Doc. Consolidada','Crédito Tomado')) = 0 THEN NULL
+    ELSE COUNT(*) FILTER (WHERE etapa IN ('Doc. Consolidada','Crédito Tomado'))::DECIMAL
+      / COUNT(*) FILTER (WHERE etapa IN ('Cliente','Doc. Consolidada','Crédito Tomado'))
+  END AS conv_cliente_doc,
+  CASE WHEN COUNT(*) FILTER (WHERE etapa IN ('Doc. Consolidada','Crédito Tomado')) = 0 THEN NULL
+    ELSE COUNT(*) FILTER (WHERE etapa = 'Crédito Tomado')::DECIMAL
+      / COUNT(*) FILTER (WHERE etapa IN ('Doc. Consolidada','Crédito Tomado'))
+  END AS conv_doc_credito
+FROM leads
+WHERE status != 'Perdido'
+GROUP BY parceiro_id;

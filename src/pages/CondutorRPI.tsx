@@ -14,6 +14,7 @@ import { ETAPAS_FUNIL } from '../types/database'
 import PipelineKanban from '../components/PipelineKanban'
 import ActionList from '../components/ActionList'
 import CopyButton from '../components/CopyButton'
+import EntregavelFormatado from '../components/EntregavelFormatado'
 
 const BLOCKS = [
   { id: 0, label: 'Preparação' },
@@ -25,12 +26,14 @@ const BLOCKS = [
 ]
 
 const DUVIDAS_CHECKLIST = [
-  { id: 'indicacao', label: 'Processo de indicação (como indicar, FAREGE)' },
-  { id: 'varredura', label: 'Varredura e documentação' },
-  { id: 'politicas', label: 'Políticas de crédito' },
-  { id: 'prazos', label: 'Prazos e SLAs' },
-  { id: 'comissao', label: 'Comissionamento e pagamentos' },
-  { id: 'outros', label: 'Outros' },
+  { id: 'indicacao', label: 'Processo de indicação (FAREGE)', playbook: 'farege' },
+  { id: 'varredura', label: 'Varredura e documentação', playbook: 'varredura' },
+  { id: 'inteligencia_credito', label: 'Inteligência de crédito', playbook: 'inteligencia_credito' },
+  { id: 'assessoria_mkt', label: 'Assessoria de marketing', playbook: 'assessoria_mkt' },
+  { id: 'processo_vendas', label: 'Processo de vendas', playbook: 'processo_vendas' },
+  { id: 'prazos', label: 'Prazos e SLAs', playbook: 'prazos_sla' },
+  { id: 'comissao', label: 'Comissionamento e pagamentos', playbook: 'comissionamento' },
+  { id: 'outros', label: 'Outros', playbook: null },
 ]
 
 function Timer({ startTime }: { startTime: number | null }) {
@@ -249,12 +252,12 @@ export default function CondutorRPI() {
   const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500'
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#F0F4F8] p-6 lg:p-8">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => navigate(`/parceiros/${parceiroId}`)} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700">
           <ArrowLeft size={16} />
-          Voltar
+          Voltar ao Perfil
         </button>
         <div className="flex items-center gap-6">
           {/* Progress */}
@@ -662,9 +665,14 @@ export default function CondutorRPI() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-5">
-              <pre className="whitespace-pre-wrap text-sm text-slate-700 font-mono bg-slate-50 rounded-xl p-4 leading-relaxed">
-                {entregavelTab === 0 ? planoText : entregavelTab === 1 ? relatorioText : hubspotText}
-              </pre>
+              <EntregavelFormatado
+                tipo={entregavelTab === 0 ? 'plano' : entregavelTab === 1 ? 'relatorio' : 'hubspot'}
+                parceiro={parceiro}
+                rpiData={rpiData}
+                acoes={allAcoes}
+                leads={leads}
+                discussionNotes={andamentoNotes}
+              />
             </div>
 
             <div className="p-5 border-t border-slate-100 flex justify-end">

@@ -34,12 +34,15 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
+        {/* Focus mode — no sidebar */}
+        <Route path="/parceiros/:id/rpi/nova" element={<CondutorRPI />} />
+        <Route path="/parceiros/:id/rpi/:rpiId" element={<ViewRPI />} />
+
+        {/* Normal layout with sidebar */}
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/parceiros" element={<ParceirosLista />} />
           <Route path="/parceiros/:id" element={<ParceiroPerfil />} />
-          <Route path="/parceiros/:id/rpi/nova" element={<CondutorRPI />} />
-          <Route path="/parceiros/:id/rpi/:rpiId" element={<ViewRPI />} />
           <Route path="/agenda" element={<Agenda />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
         </Route>

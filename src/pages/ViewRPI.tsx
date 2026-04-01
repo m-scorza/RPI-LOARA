@@ -33,9 +33,9 @@ export default function ViewRPI() {
   if (!rpi) return <div className="text-center py-12 text-slate-500">RPI não encontrada.</div>
 
   return (
-    <div>
+    <div className="min-h-screen bg-[#F0F4F8] p-6 lg:p-8">
       <button onClick={() => navigate(`/parceiros/${parceiroId}`)} className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 mb-6">
-        <ArrowLeft size={16} /> Voltar ao perfil
+        <ArrowLeft size={16} /> Voltar ao Perfil
       </button>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-6">
