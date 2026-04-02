@@ -116,6 +116,9 @@ export interface RPI {
   plano_acao_texto: string | null
   hubspot_texto: string | null
   relatorio_texto: string | null
+  funil_vendas_ritmo: number | null
+  funil_vendas_snapshot: FunilVendasSnapshot | null
+  playbooks_usados: string[]
   status: StatusRPI
   proxima_rpi_prevista: string | null
   created_at: string
@@ -155,6 +158,45 @@ export interface AcompanhamentoMensal {
   creditos_tomados: number
   created_at: string
   updated_at: string
+}
+
+// Playbooks
+export type PlaybookStepType = 'texto' | 'checklist' | 'passo_a_passo' | 'alerta'
+
+export interface PlaybookStep {
+  tipo: PlaybookStepType
+  titulo: string
+  corpo?: string
+  items?: string[]
+  passos?: Array<{ numero: number; titulo: string; descricao: string }>
+}
+
+export interface Playbook {
+  id: string
+  slug: string
+  titulo: string
+  descricao: string | null
+  conteudo: PlaybookStep[]
+  categoria: string | null
+  ativo: boolean
+  ordem: number
+  created_at: string
+  updated_at: string
+}
+
+// Funil de Vendas
+export interface FunilVendasSnapshot {
+  ritmo: number
+  cadastros_dia: number
+  prospeccoes_semana: number
+  contatos_mes: number
+  reunioes_semana: number
+  reunioes_mes: number
+  clientes_mes: number
+  conversoes: Array<{ pct: number; clientes: number; credito: number }>
+  credito_projetado_mes: number
+  comissao_projetada_mes: number
+  atinge_meta: boolean
 }
 
 // Supabase Database type helper

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus } from 'lucide-react'
 import { toast } from 'sonner'
@@ -6,24 +6,53 @@ import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
 import { useAcoes } from '../hooks/useAcoes'
+import { usePlaybooks } from '../hooks/usePlaybooks'
 import { formatCurrency, formatDate } from '../lib/format'
 import { generateHubSpotText, generatePlanoAcaoText, generateRelatorioText } from '../lib/generators'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
-import type { Parceiro, Acao, Responsavel, Prioridade, CategoriaAcao } from '../types/database'
+import type { Parceiro, Acao, Responsavel, Prioridade, CategoriaAcao, FunilVendasSnapshot, Playbook } from '../types/database'
 import { ETAPAS_FUNIL } from '../types/database'
 import PipelineKanban from '../components/PipelineKanban'
 import ActionList from '../components/ActionList'
 import CopyButton from '../components/CopyButton'
 import EntregavelFormatado from '../components/EntregavelFormatado'
+import PlaybookViewer from '../components/PlaybookViewer'
+import FunilVendas from '../components/FunilVendas'
 
-const BLOCKS = [
-  { id: 0, label: 'Preparação' },
-  { id: 2, label: 'Dúvidas' },
-  { id: 3, label: 'Andamento' },
-  { id: 4, label: 'Indicações' },
-  { id: 5, label: 'Plano de Ação' },
-  { id: 6, label: 'Finalização' },
-]
+interface Block {
+  id: string
+  label: string
+  playbook?: Playbook
+}
+
+function buildBlocks(
+  duvidas: Record<string, { checked: boolean; notes: string; resolved: boolean }>,
+  playbooks: Playbook[],
+): Block[] {
+  const base: Block[] = [
+    { id: 'prep', label: 'Preparação' },
+    { id: 'duvidas', label: 'Dúvidas' },
+  ]
+
+  // Insert playbook blocks for checked topics
+  const playbookBlocks: Block[] = []
+  for (const t of DUVIDAS_CHECKLIST) {
+    if (duvidas[t.id]?.checked && t.playbook) {
+      const pb = playbooks.find((p) => p.slug === t.playbook)
+      if (pb) playbookBlocks.push({ id: `playbook_${pb.slug}`, label: pb.titulo, playbook: pb })
+    }
+  }
+
+  const rest: Block[] = [
+    { id: 'andamento', label: 'Andamento' },
+    { id: 'funil_vendas', label: 'Funil de Vendas' },
+    { id: 'indicacoes', label: 'Indicações' },
+    { id: 'plano_acao', label: 'Plano de Ação' },
+    { id: 'finalizacao', label: 'Finalização' },
+  ]
+
+  return [...base, ...playbookBlocks, ...rest]
+}
 
 const DUVIDAS_CHECKLIST = [
   { id: 'indicacao', label: 'Processo de indicação (FAREGE)', playbook: 'farege' },
@@ -59,9 +88,13 @@ export default function CondutorRPI() {
   const navigate = useNavigate()
 
   const [parceiro, setParceiro] = useState<Parceiro | null>(null)
-  const [currentBlock, setCurrentBlock] = useState(0)
+  const [currentBlockId, setCurrentBlockId] = useState('prep')
   const [startTime, setStartTime] = useState<number | null>(null)
   const [rpiId, setRpiId] = useState<string | null>(null)
+
+  // Funil de vendas state
+  const [funilRitmo, setFunilRitmo] = useState(4)
+  const [funilSnapshot, setFunilSnapshot] = useState<FunilVendasSnapshot | null>(null)
 
   // Block data
   const [duvidas, setDuvidas] = useState<Record<string, { checked: boolean; notes: string; resolved: boolean }>>({})
@@ -90,6 +123,22 @@ export default function CondutorRPI() {
   const { leads, createLead } = useLeads(parceiroId || '')
   const { rpis, createRPI, updateRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
+  const { playbooks } = usePlaybooks()
+
+  // Dynamic blocks based on checked dúvidas
+  const blocks = useMemo(() => buildBlocks(duvidas, playbooks), [duvidas, playbooks])
+  const blockIndex = blocks.findIndex((b) => b.id === currentBlockId)
+  const currentBlock = blocks[blockIndex] || blocks[0]
+  const canGoBack = blockIndex > 0
+  const canGoForward = blockIndex < blocks.length - 1
+
+  const goBack = () => { if (canGoBack) setCurrentBlockId(blocks[blockIndex - 1].id) }
+  const goForward = () => { if (canGoForward) setCurrentBlockId(blocks[blockIndex + 1].id) }
+
+  const handleFunilRitmoChange = useCallback((ritmo: number, snapshot: FunilVendasSnapshot) => {
+    setFunilRitmo(ritmo)
+    setFunilSnapshot(snapshot)
+  }, [])
 
   // Load parceiro data
   useEffect(() => {
@@ -136,7 +185,7 @@ export default function CondutorRPI() {
 
   const startMeeting = async () => {
     setStartTime(Date.now())
-    setCurrentBlock(2)
+    setCurrentBlockId('duvidas')
     // Create RPI record
     const rpi = await createRPI({
       parceiro_id: parceiroId!,
@@ -145,13 +194,6 @@ export default function CondutorRPI() {
     })
     if (rpi) setRpiId(rpi.id)
   }
-
-  const blockIndex = BLOCKS.findIndex((b) => b.id === currentBlock)
-  const canGoBack = blockIndex > 0
-  const canGoForward = blockIndex < BLOCKS.length - 1
-
-  const goBack = () => { if (canGoBack) setCurrentBlock(BLOCKS[blockIndex - 1].id) }
-  const goForward = () => { if (canGoForward) setCurrentBlock(BLOCKS[blockIndex + 1].id) }
 
   // Add new lead from Block 4
   const addNewLead = async () => {
@@ -201,6 +243,11 @@ export default function CondutorRPI() {
     const totalDemanda = activeLeads.reduce((s, l) => s + (l.demanda || 0), 0)
     const duration = startTime ? Math.floor((Date.now() - startTime) / 60000) : null
 
+    // Collect used playbook slugs
+    const playbooksUsados = DUVIDAS_CHECKLIST
+      .filter((t) => duvidas[t.id]?.checked && t.playbook)
+      .map((t) => t.playbook!)
+
     // Update RPI
     await updateRPI(rpiId, {
       status: 'finalizada',
@@ -213,6 +260,9 @@ export default function CondutorRPI() {
       bloco_duvidas: duvidas as unknown as Record<string, unknown>,
       bloco_andamento: { notes: andamentoNotes } as unknown as Record<string, unknown>,
       bloco_indicacoes: { compromisso: indicacoesCompromisso } as unknown as Record<string, unknown>,
+      funil_vendas_ritmo: funilRitmo,
+      funil_vendas_snapshot: funilSnapshot,
+      playbooks_usados: playbooksUsados,
       plano_acao_texto: planoText,
       hubspot_texto: hubspotText,
       relatorio_texto: relatorioText,
@@ -261,21 +311,21 @@ export default function CondutorRPI() {
         </button>
         <div className="flex items-center gap-6">
           {/* Progress */}
-          <div className="flex items-center gap-1">
-            {BLOCKS.map((b, i) => (
+          <div className="flex items-center gap-1 flex-wrap">
+            {blocks.map((b, i) => (
               <button
                 key={b.id}
-                onClick={() => { if (startTime || b.id === 0) setCurrentBlock(b.id) }}
+                onClick={() => { if (startTime || b.id === 'prep') setCurrentBlockId(b.id) }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  currentBlock === b.id
-                    ? 'bg-teal-500 text-white'
+                  currentBlock.id === b.id
+                    ? b.playbook ? 'bg-violet-500 text-white' : 'bg-teal-500 text-white'
                     : blockIndex > i
-                    ? 'bg-teal-100 text-teal-700'
+                    ? b.playbook ? 'bg-violet-100 text-violet-700' : 'bg-teal-100 text-teal-700'
                     : 'bg-slate-100 text-slate-500'
                 }`}
               >
                 {blockIndex > i ? <Check size={12} /> : null}
-                {b.label}
+                {b.playbook ? `📖 ${b.label}` : b.label}
               </button>
             ))}
           </div>
@@ -286,8 +336,8 @@ export default function CondutorRPI() {
       {/* Block Content */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
 
-        {/* BLOCK 0: Preparação */}
-        {currentBlock === 0 && (() => {
+        {/* BLOCK: Preparação */}
+        {currentBlock.id === 'prep' && (() => {
           const proj = calculateRevenueProjection(parceiro)
           const activeLeads = leads.filter((l) => l.status === 'Ativo')
           return (
@@ -345,8 +395,8 @@ export default function CondutorRPI() {
           )
         })()}
 
-        {/* BLOCK 2: Dúvidas e Dificuldades */}
-        {currentBlock === 2 && (
+        {/* BLOCK: Dúvidas e Dificuldades */}
+        {currentBlock.id === 'duvidas' && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Dúvidas e Dificuldades</h2>
             <p className="text-sm text-slate-500">Registre dúvidas discutidas com o parceiro.</p>
@@ -400,8 +450,13 @@ export default function CondutorRPI() {
           </div>
         )}
 
-        {/* BLOCK 3: Andamento das Operações */}
-        {currentBlock === 3 && (
+        {/* BLOCK: Playbook */}
+        {currentBlock.playbook && (
+          <PlaybookViewer playbook={currentBlock.playbook} onComplete={goForward} />
+        )}
+
+        {/* BLOCK: Andamento das Operações */}
+        {currentBlock.id === 'andamento' && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Andamento das Operações</h2>
 
@@ -427,8 +482,17 @@ export default function CondutorRPI() {
           </div>
         )}
 
-        {/* BLOCK 4: Futuras Indicações */}
-        {currentBlock === 4 && (() => {
+        {/* BLOCK: Funil de Vendas */}
+        {currentBlock.id === 'funil_vendas' && (
+          <FunilVendas
+            parceiro={parceiro}
+            ritmoInicial={funilRitmo}
+            onRitmoChange={handleFunilRitmoChange}
+          />
+        )}
+
+        {/* BLOCK: Futuras Indicações */}
+        {currentBlock.id === 'indicacoes' && (() => {
           const proj = calculateRevenueProjection(parceiro)
           return (
           <div className="space-y-6">
@@ -478,8 +542,8 @@ export default function CondutorRPI() {
           )
         })()}
 
-        {/* BLOCK 5: Plano de Ação */}
-        {currentBlock === 5 && (
+        {/* BLOCK: Plano de Ação */}
+        {currentBlock.id === 'plano_acao' && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Plano de Ação</h2>
 
@@ -567,8 +631,8 @@ export default function CondutorRPI() {
           </div>
         )}
 
-        {/* BLOCK 6: Finalização */}
-        {currentBlock === 6 && (
+        {/* BLOCK: Finalização */}
+        {currentBlock.id === 'finalizacao' && (
           <div className="space-y-6">
             <h2 className="text-xl font-bold text-slate-800">Finalização</h2>
 
@@ -621,7 +685,7 @@ export default function CondutorRPI() {
         )}
 
         {/* Navigation */}
-        {currentBlock !== 0 && (
+        {currentBlock.id !== 'prep' && !currentBlock.playbook && (
           <div className="flex justify-between mt-8 pt-6 border-t border-slate-100">
             <button onClick={goBack} disabled={!canGoBack} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 disabled:opacity-30">
               <ArrowLeft size={16} />
