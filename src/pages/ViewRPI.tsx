@@ -52,9 +52,23 @@ export default function ViewRPI() {
         </div>
 
         {rpi.notas_gerais && (
-          <div>
-            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Notas Gerais</h3>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap">{rpi.notas_gerais}</p>
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Notas Gerais</h3>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap font-medium">{rpi.notas_gerais}</p>
+          </div>
+        )}
+
+        {rpi.funil_vendas_snapshot && (
+          <div className="border border-slate-100 rounded-2xl p-6">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Snapshot do Pipeline no momento da RPI</h3>
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              {Object.entries(rpi.funil_vendas_snapshot as Record<string, number>).map(([key, value]) => (
+                <div key={key} className="p-3 bg-slate-50 rounded-xl">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mb-1">{key.replace('_', ' ')}</p>
+                  <p className="text-lg font-black text-slate-800">{value}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

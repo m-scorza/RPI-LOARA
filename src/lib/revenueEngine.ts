@@ -31,13 +31,13 @@ export interface RevenueProjection {
   conversaoGeralLeadCliente: number
 }
 
-export function calculateRevenueProjection(parceiro: Parceiro): RevenueProjection {
-  const metaReceitaMensal = parceiro.meta_receita_mensal || 20000
+export function calculateRevenueProjection(parceiro: Parceiro, settings?: any): RevenueProjection {
+  const metaReceitaMensal = parceiro.meta_receita_mensal || settings?.meta_receita_mensal || 20000
   const metaReceitaAnual = metaReceitaMensal * 12
-
+ 
   // COMMISSION MATH (Logical Chain)
   // 1. Taxa Loara (e.g. 6%)
-  const taxaLoara = parceiro.taxa_loara || 0.06
+  const taxaLoara = parceiro.taxa_loara || settings?.taxa_produto || 0.06
   // 2. Imposto (Loara pays 22% of gross)
   const loaraNet = taxaLoara * 0.78
   // 3. Share Parceiro (Prata 30%, Ouro 40%)
@@ -45,25 +45,25 @@ export function calculateRevenueProjection(parceiro: Parceiro): RevenueProjectio
   
   // Final comissao_bruta for the partner
   const comissaoBruta = loaraNet * share
-  // Net commission per R$ of credit (after partner's own taxes if any, usually same as comissaoBruta here)
-  const comissaoLiquida = comissaoBruta * (1 - (parceiro.imposto_comissao || 0.2138))
-
+  // Net commission per R$ of credit
+  const comissaoLiquida = comissaoBruta * (1 - (parceiro.imposto_comissao || settings?.imposto_comissao || 0.2138))
+ 
   // How much credit do we need to generate this revenue?
   const creditoNecessarioAnual = comissaoLiquida > 0 ? metaReceitaAnual / comissaoLiquida : 0
   const creditoNecessarioMensal = creditoNecessarioAnual / 12
-
+ 
   // How many clients does that require?
-  const tiqueteMedio = parceiro.tiquete_medio || 800000
+  const tiqueteMedio = parceiro.tiquete_medio || settings?.tiquete_medio || 800000
   const clientesNecessariosAnual = tiqueteMedio > 0 ? Math.ceil(creditoNecessarioAnual / tiqueteMedio) : 0
   const clientesNecessariosMensal = Math.ceil(clientesNecessariosAnual / 12)
-
+ 
   // Funnel conversions (backward from clients to leads)
-  const convLeadQualificado = parceiro.conv_lead_qualificado || 0.60
-  const convQualificadoOportunidade = parceiro.conv_qualificado_oportunidade || 0.50
-  const convOportunidadeCliente = parceiro.conv_oportunidade_cliente || 0.65
-  const convClienteDoc = parceiro.conv_cliente_doc || 0.80
-  const convDocCredito = parceiro.conv_doc_credito || 0.85
-
+  const convLeadQualificado = parceiro.conv_lead_qualificado || settings?.conv_lead_qualificado || 0.60
+  const convQualificadoOportunidade = parceiro.conv_qualificado_oportunidade || settings?.conv_qualificado_oportunidade || 0.50
+  const convOportunidadeCliente = parceiro.conv_oportunidade_cliente || settings?.conv_oportunidade_cliente || 0.65
+  const convClienteDoc = parceiro.conv_cliente_doc || settings?.conv_cliente_doc || 0.80
+  const convDocCredito = parceiro.conv_doc_credito || settings?.conv_doc_credito || 0.85
+ 
   // Overall conversion: lead → credit taken
   const conversaoGeralLeadCliente =
     convLeadQualificado *

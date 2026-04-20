@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -13,6 +12,17 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { GERENTE_NOME } from '../lib/format'
+import { isSupabaseConfigured, localParceiros, localRPIs } from '../lib/localStore'
+import { supabase } from '../lib/supabase'
+
+interface Notification {
+  id: string
+  title: string
+  description: string
+  type: 'urgent' | 'info'
+  date: string
+  link: string
+}
 
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,6 +37,10 @@ export default function Layout() {
   })
   const logout = useAuthStore((s) => s.logout)
   const location = useLocation()
+  const navigate = useNavigate()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
   
   const currentRoute = NAV_ITEMS.find(item => 
     item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
@@ -35,6 +49,49 @@ export default function Layout() {
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(collapsed))
   }, [collapsed])
+
+  useEffect(() => {
+    async function fetchNotifications() {
+      // Simple logic for overdue RPIs
+      const overdueItems: Notification[] = []
+      
+      if (isSupabaseConfigured) {
+        // Fetch from view or logic
+        // For now, let's mock a few based on partners to avoid heavy queries in layout
+      } else {
+        const partners = localParceiros.selectAll().filter(p => p.categoria !== 'Bronze')
+        for (const p of partners) {
+          const rpis = localRPIs.selectWhere({ parceiro_id: p.id, status: 'finalizada' })
+            .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
+          
+          if (rpis.length > 0) {
+            const last = new Date(rpis[0].data_reuniao)
+            const next = new Date(last)
+            next.setDate(next.getDate() + 45)
+            if (next < new Date()) {
+              overdueItems.push({
+                id: p.id,
+                title: 'RPI Atrasada',
+                description: `${p.nome} está com a sessão RPI fora do prazo.`,
+                type: 'urgent',
+                date: next.toISOString(),
+                link: `/parceiros/${p.id}/rpi/nova`
+              })
+            }
+          }
+        }
+      }
+      setNotifications(overdueItems)
+    }
+    fetchNotifications()
+  }, [])
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      navigate(`/parceiros?search=${encodeURIComponent(searchQuery)}`)
+    }
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
@@ -114,15 +171,55 @@ export default function Layout() {
           </div>
 
           <div className="flex items-center gap-6">
-            <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-full text-slate-400 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 transition-all">
+            <form onSubmit={handleSearch} className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-full text-slate-400 focus-within:ring-2 focus-within:ring-teal-500/20 focus-within:border-teal-500 transition-all">
               <Search size={16} />
-              <input type="text" placeholder="Pesquisar..." className="bg-transparent border-none outline-none text-xs text-slate-600 w-40" />
-            </div>
+              <input 
+                type="text" 
+                placeholder="Pesquisar parceiro..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none outline-none text-xs text-slate-600 w-40" 
+              />
+            </form>
             
-            <button className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <Bell size={20} />
+                {notifications.length > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-4 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                  <div className="p-4 border-b border-slate-50 bg-[#0F172A] text-white">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-teal-400">Notificações</p>
+                    <h3 className="text-sm font-bold">Resumo de Alertas</h3>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <p className="text-xs text-slate-400 font-medium">Tudo em dia por aqui!</p>
+                      </div>
+                    ) : (
+                      notifications.map(n => (
+                        <div 
+                          key={n.id}
+                          onClick={() => { navigate(n.link); setShowNotifications(false) }}
+                          className="p-4 hover:bg-slate-50 border-b border-slate-50 cursor-pointer transition-colors"
+                        >
+                          <p className="text-xs font-black text-slate-800">{n.title}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 font-medium leading-relaxed">{n.description}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center gap-3 pl-6 border-l border-slate-100">
               <div className="text-right hidden sm:block">

@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, Users, Pencil, Trash2, Filter, MoreHorizontal, ChevronRight } from 'lucide-react'
 import { useParceiros } from '../hooks/useParceiros'
 import type { Parceiro, Categoria } from '../types/database'
@@ -20,12 +20,19 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function ParceirosLista() {
   const { parceiros, loading, createParceiro, updateParceiro, deleteParceiro } = useParceiros()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  
   const [showForm, setShowForm] = useState(false)
   const [editingParceiro, setEditingParceiro] = useState<Parceiro | null>(null)
   const [filterCategoria, setFilterCategoria] = useState<Categoria | 'Todos'>('Todos')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(searchParams.get('search') || '')
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const navigate = useNavigate()
+
+  useEffect(() => {
+    const q = searchParams.get('search')
+    if (q !== null) setSearch(q)
+  }, [searchParams])
 
   const filtered = parceiros.filter((p) => {
     if (filterCategoria !== 'Todos' && p.categoria !== filterCategoria) return false

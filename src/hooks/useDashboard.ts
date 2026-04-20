@@ -18,6 +18,7 @@ export interface DashboardStats {
     doc: number
     credito_tomado: number
   }
+  monthlyPerformance: Array<{ name: string; total: number }>
 }
 
 export interface ProximaRpi {
@@ -36,7 +37,9 @@ export function useDashboard() {
     creditosTomadosYtd: 0,
     pipelineTotal: 0,
     pipelinePonderado: 0,
-    totalLeadsAtivos: 0
+    totalLeadsAtivos: 0,
+    monthlyPerformance: [],
+    funnel: { lead: 0, qualificado: 0, oportunidade: 0, cliente: 0, doc: 0, credito_tomado: 0 }
   })
   const [proximasRpis, setProximasRpis] = useState<ProximaRpi[]>([])
   const [loading, setLoading] = useState(true)
@@ -47,7 +50,63 @@ export function useDashboard() {
     setError(null)
     try {
       if (!isSupabaseConfigured) {
-        // Fallback or empty data for local mode
+        // Import local storage tools dynamically or use existing ones
+        const { localParceiros, localLeads, localRPIs, localAcompanhamento } = await import('../lib/localStore')
+        
+        const parceiros = localParceiros.selectAll().filter(p => p.status === 'ativo')
+        const leads = localLeads.selectAll()
+        const historical = localAcompanhamento.selectAll()
+        
+        const activeLeads = leads.filter(l => l.status === 'Ativo')
+        const totalCreditoTomado = historical.reduce((acc, curr) => acc + (curr.credito_tomado || 0), 0)
+        const totalComissao = historical.reduce((acc, curr) => acc + (curr.comissao_recebida || 0), 0)
+
+        const funnelCounts = activeLeads.reduce((acc, curr) => {
+          const etapa = curr.etapa.toLowerCase().replace(' ', '_') as keyof DashboardStats['funnel']
+          if (acc[etapa] !== undefined) acc[etapa]++
+          return acc
+        }, { lead: 0, qualificado: 0, oportunidade: 0, cliente: 0, doc: 0, credito_tomado: 0 })
+
+        // Aggregate monthly performance
+        const last6Months = Array.from({ length: 6 }).map((_, i) => {
+          const d = new Date()
+          d.setMonth(d.getMonth() - i)
+          return { month: d.getMonth() + 1, year: d.getFullYear(), name: d.toLocaleString('default', { month: 'short' }) }
+        }).reverse()
+
+        const performanceArray = last6Months.map(m => {
+          const monthData = historical.filter(h => h.mes === m.month && h.ano === m.year)
+          return {
+            name: m.name,
+            total: monthData.reduce((acc, curr) => acc + (curr.credito_tomado || 0), 0)
+          }
+        })
+
+        setStats({
+          creditoYtd: totalCreditoTomado,
+          comissaoYtd: totalComissao,
+          leadsYtd: leads.length,
+          creditosTomadosYtd: totalCreditoTomado,
+          pipelineTotal: activeLeads.reduce((acc, curr) => acc + (curr.demanda || 0), 0),
+          pipelinePonderado: activeLeads.reduce((acc, curr) => acc + (curr.demanda || 0) * curr.probabilidade, 0),
+          totalLeadsAtivos: activeLeads.length,
+          funnel: funnelCounts,
+          monthlyPerformance: performanceArray
+        })
+
+        // Mock proximas rpis for local mode by checking partner categories
+        const upcomingRpis = parceiros
+          .filter(p => p.categoria !== 'Bronze')
+          .slice(0, 10)
+          .map(p => ({
+            parceiro_id: p.id,
+            nome: p.nome,
+            categoria: p.categoria,
+            proxima_rpi: new Date().toISOString(),
+            urgencia: 'próxima' as const
+          }))
+        
+        setProximasRpis(upcomingRpis)
         setLoading(false)
         return
       }
@@ -73,6 +132,31 @@ export function useDashboard() {
         .limit(10)
 
       if (rpiError) throw rpiError
+
+      // Fetch Global Monthly Performance
+      const { data: globalPerf, error: perfError } = await supabase
+        .from('acompanhamento_mensal')
+        .select('mes, ano, credito_tomado')
+        .order('ano', { ascending: false })
+        .order('mes', { ascending: false })
+        .limit(50) // Get enough to aggregate
+
+      if (perfError) throw perfError
+
+      // Aggregate global performance
+      const last6MonthsArr = Array.from({ length: 6 }).map((_, i) => {
+        const d = new Date()
+        d.setMonth(d.getMonth() - i)
+        return { month: d.getMonth() + 1, year: d.getFullYear(), name: d.toLocaleString('default', { month: 'short' }) }
+      }).reverse()
+
+      const globalPerformanceArray = last6MonthsArr.map(m => {
+        const monthData = (globalPerf || []).filter(h => h.mes === m.month && h.ano === m.year)
+        return {
+          name: m.name,
+          total: monthData.reduce((acc, curr) => acc + (curr.credito_tomado || 0), 0)
+        }
+      })
 
       // Aggregate YTD
       const aggregatedYtd = (ytdData || []).reduce((acc, curr) => ({
@@ -104,7 +188,8 @@ export function useDashboard() {
 
       setStats({
         ...aggregatedYtd,
-        ...aggregatedPipeline
+        ...aggregatedPipeline,
+        monthlyPerformance: globalPerformanceArray
       })
       setProximasRpis(rpiData as ProximaRpi[])
 

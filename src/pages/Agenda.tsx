@@ -73,25 +73,25 @@ export default function Agenda() {
       if (parceirosData.length === 0) { setLoading(false); return }
 
       const agendaItems: AgendaItem[] = []
+      let rpisData: RPI[] = []
+
+      if (isSupabaseConfigured) {
+        const { data: rpis } = await supabase
+          .from('rpis')
+          .select('*')
+          .eq('status', 'finalizada')
+          .in('parceiro_id', parceirosData.map(p => p.id))
+          .order('data_reuniao', { ascending: false })
+        rpisData = (rpis as RPI[]) || []
+      } else {
+        rpisData = localRPIs.selectAll()
+          .filter((r) => r.status === 'finalizada')
+          .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
+      }
 
       for (const p of parceirosData) {
-        let ultimaRPI: RPI | null = null
-
-        if (isSupabaseConfigured) {
-          const { data: rpis } = await supabase
-            .from('rpis')
-            .select('*')
-            .eq('parceiro_id', p.id)
-            .eq('status', 'finalizada')
-            .order('data_reuniao', { ascending: false })
-            .limit(1)
-          ultimaRPI = rpis && rpis.length > 0 ? rpis[0] as RPI : null
-        } else {
-          const rpis = localRPIs.selectWhere({ parceiro_id: p.id } as Partial<RPI>)
-            .filter((r) => r.status === 'finalizada')
-            .sort((a, b) => b.data_reuniao.localeCompare(a.data_reuniao))
-          ultimaRPI = rpis[0] || null
-        }
+        const ultimaRPI = rpisData.find(r => r.parceiro_id === p.id) || null
+        
         let proximaDate: string | null = null
         let diasRestantes: number | null = null
         let urgencia: AgendaItem['urgencia'] = 'nunca'

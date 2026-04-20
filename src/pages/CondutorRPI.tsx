@@ -10,6 +10,7 @@ import { useRPIs } from '../hooks/useRPIs'
 import { useAcoes } from '../hooks/useAcoes'
 import { useAcompanhamento } from '../hooks/useAcompanhamento'
 import { usePlaybooks } from '../hooks/usePlaybooks'
+import { useSettings } from '../hooks/useSettings'
 import { formatCurrency, formatDate } from '../lib/format'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 import { useForm } from 'react-hook-form'
@@ -218,8 +219,9 @@ export default function CondutorRPI() {
   const { leads, createLead, moveLead } = useLeads(parceiroId || '')
   const { rpis, createRPI, updateRPI, getLastRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
-  const { historico: acompHistorico } = useAcompanhamento(parceiroId || '')
+  const { acompHistorico } = useAcompanhamento(parceiroId || '')
   const { playbooks } = usePlaybooks()
+  const { settings } = useSettings()
 
   // S0-4: Toast if playbooks not loaded
   useEffect(() => {
@@ -592,7 +594,7 @@ export default function CondutorRPI() {
 
         {/* BLOCK: Preparação */}
         {currentBlock.id === 'prep' && (() => {
-          const proj = calculateRevenueProjection(parceiro!)
+          const proj = calculateRevenueProjection(parceiro!, settings)
           const activeLeads = leads.filter((l: Lead) => l.status === 'Ativo')
           return (
             <div className="space-y-10 max-w-4xl mx-auto">

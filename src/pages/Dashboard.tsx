@@ -36,14 +36,16 @@ export default function Dashboard() {
     )
   }
 
-  const chartData = [
-    { name: 'Jan', total: stats.creditoYtd * 0.12 },
-    { name: 'Fev', total: stats.creditoYtd * 0.15 },
-    { name: 'Mar', total: stats.creditoYtd * 0.18 },
-    { name: 'Abr', total: stats.creditoYtd * 0.22 },
-    { name: 'Mai', total: stats.creditoYtd * 0.14 },
-    { name: 'Jun', total: stats.creditoYtd * 0.19 },
-  ]
+  const chartData = stats.monthlyPerformance && stats.monthlyPerformance.length > 0 
+    ? stats.monthlyPerformance 
+    : [
+        { name: 'Jan', total: 0 },
+        { name: 'Fev', total: 0 },
+        { name: 'Mar', total: 0 },
+        { name: 'Abr', total: 0 },
+        { name: 'Mai', total: 0 },
+        { name: 'Jun', total: 0 },
+      ]
 
   const funnelData = [
     { etapa: 'Lead', count: stats.funnel?.lead || 0, valor: 0 },

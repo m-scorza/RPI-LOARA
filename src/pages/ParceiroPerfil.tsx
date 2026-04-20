@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
+import { useAcompanhamento } from '../hooks/useAcompanhamento'
+import { useSettings } from '../hooks/useSettings'
 import { formatCurrency, formatDate } from '../lib/format'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
 import type { Parceiro, Lead, Categoria, EtapaFunil } from '../types/database'
@@ -12,6 +14,16 @@ import PipelineKanban from '../components/PipelineKanban'
 import LeadForm from '../components/LeadForm'
 import ParceiroForm from './ParceiroForm'
 import EmptyState from '../components/EmptyState'
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend 
+} from 'recharts'
 
 const CATEGORIA_STYLES: Record<Categoria, string> = {
   Ouro: 'bg-amber-100 text-amber-600 border border-amber-200',
@@ -22,6 +34,7 @@ const CATEGORIA_STYLES: Record<Categoria, string> = {
 const TABS = [
   { id: 'visao', label: 'Visão Geral', icon: Building2 },
   { id: 'pipeline', label: 'Pipeline', icon: Users },
+  { id: 'performance', label: 'Performance', icon: TrendingUp },
   { id: 'rpis', label: 'Histórico RPIs', icon: FileText },
   { id: 'config', label: 'Configurações', icon: Calendar },
 ] as const
@@ -42,6 +55,8 @@ export default function ParceiroPerfil() {
   const { getParceiro, updateParceiro } = useParceiros()
   const { leads, createLead, updateLead, deleteLead, moveLead } = useLeads(id || '')
   const { rpis, deleteRPI } = useRPIs(id || '')
+  const { historico } = useAcompanhamento(id || '')
+  const { settings } = useSettings()
 
   useEffect(() => {
     async function fetch() {
@@ -172,7 +187,7 @@ export default function ParceiroPerfil() {
       {/* Tab Content */}
       <div className="animate-fade-in">
         {tab === 'visao' && (() => {
-          const proj = calculateRevenueProjection(parceiro)
+          const proj = calculateRevenueProjection(parceiro, settings)
           return (
           <div className="space-y-10">
             {/* Insights Banner */}
@@ -248,6 +263,110 @@ export default function ParceiroPerfil() {
           </div>
           )
         })()}
+
+        {tab === 'performance' && (
+          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="glass-card rounded-[28px] p-8 border border-slate-100">
+               <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Indicadores Históricos</p>
+                    <h3 className="text-2xl font-black text-slate-800 tracking-tight">Performance de Crédito</h3>
+                  </div>
+                  <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+                     <button className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#0F172A] bg-white rounded-lg shadow-sm border border-slate-200">Volume</button>
+                     <button className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600">Conversão</button>
+                  </div>
+               </div>
+               
+               <div className="h-[420px] w-full">
+                {historico.length === 0 ? (
+                  <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl">
+                     <p className="text-slate-300 font-bold uppercase tracking-widest text-xs">Dados Históricos Indisponíveis</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={[...historico].reverse()} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorCredit" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#0D9488" stopOpacity={0.1}/>
+                          <stop offset="95%" stopColor="#0D9488" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                      <XAxis 
+                        dataKey={(d) => `${d.mes}/${d.ano.toString().slice(2)}`} 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
+                        dy={15}
+                      />
+                      <YAxis 
+                        axisLine={false} 
+                        tickLine={false} 
+                        tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 700 }}
+                        tickFormatter={(v) => `R$ ${v / 1000}k`}
+                      />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)', padding: '16px' }}
+                        formatter={(v: any) => [formatCurrency(v), 'Crédito Tomado']}
+                        labelStyle={{ fontWeight: 900, marginBottom: '8px', color: '#0F172A', textTransform: 'uppercase', fontSize: '10px' }}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="credito_tomado" 
+                        stroke="#0D9488" 
+                        strokeWidth={4} 
+                        dot={{ r: 6, fill: '#0D9488', strokeWidth: 3, stroke: '#FFF' }}
+                        activeDot={{ r: 8, strokeWidth: 0 }}
+                        name="Realizado"
+                        animationDuration={1500}
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="credito_ponderado" 
+                        stroke="#8B5CF6" 
+                        strokeWidth={2} 
+                        strokeDasharray="8 8" 
+                        dot={false}
+                        name="Expectativa"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+               <div className="glass-card rounded-[28px] p-8 border border-slate-100 flex items-center gap-6">
+                  <div className="w-14 h-14 bg-teal-50 rounded-2xl flex items-center justify-center text-teal-600 flex-shrink-0">
+                     <TrendingUp size={28} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Crescimento QoQ</p>
+                    <p className="text-2xl font-black text-slate-800">+12.4%</p>
+                  </div>
+               </div>
+               <div className="glass-card rounded-[28px] p-8 border border-slate-100 flex items-center gap-6">
+                  <div className="w-14 h-14 bg-violet-50 rounded-2xl flex items-center justify-center text-violet-600 flex-shrink-0">
+                     <Target size={28} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Taxa de Conversão</p>
+                    <p className="text-2xl font-black text-slate-800">8.4%</p>
+                  </div>
+               </div>
+               <div className="glass-card rounded-[28px] p-8 border border-slate-100 flex items-center gap-6">
+                  <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-600 flex-shrink-0">
+                     <DollarSign size={28} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Meta Batida</p>
+                    <p className="text-2xl font-black text-slate-800">92%</p>
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
 
         {tab === 'pipeline' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -330,7 +449,7 @@ export default function ParceiroPerfil() {
         )}
 
         {tab === 'config' && (() => {
-          const proj = calculateRevenueProjection(parceiro)
+          const proj = calculateRevenueProjection(parceiro, settings)
           return (
           <div className="glass-card rounded-3xl p-8 border border-slate-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex items-center justify-between mb-10 pb-4 border-b border-slate-50">
