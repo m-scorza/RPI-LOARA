@@ -39,7 +39,25 @@ function buildBlocks(
   for (const t of DUVIDAS_CHECKLIST) {
     if (duvidas[t.id]?.checked && t.playbook) {
       const pb = playbooks.find((p) => p.slug === t.playbook)
-      if (pb) playbookBlocks.push({ id: `playbook_${pb.slug}`, label: pb.titulo, playbook: pb })
+      if (pb) {
+        playbookBlocks.push({ id: `playbook_${pb.slug}`, label: pb.titulo, playbook: pb })
+      } else {
+        // Placeholder for missing playbook
+        playbookBlocks.push({ 
+          id: `pb_missing_${t.playbook}`, 
+          label: 'Playbook não disponível', 
+          playbook: { 
+            id: `missing_${t.playbook}`,
+            slug: t.playbook,
+            titulo: 'Playbook não carregado',
+            descricao: `O conteúdo para o playbook "${t.playbook}" não foi encontrado.`,
+            conteudo: [{ tipo: 'alerta', titulo: 'Indisponível', corpo: 'Este playbook ainda não foi configurado no sistema.' }],
+            categoria: 'aviso',
+            ativo: true,
+            ordem: 99,
+          } as Playbook
+        })
+      }
     }
   }
 
@@ -99,6 +117,7 @@ export default function CondutorRPI() {
   const [currentBlockId, setCurrentBlockId] = useState('prep')
   const [startTime, setStartTime] = useState<number | null>(null)
   const [rpiId, setRpiId] = useState<string | null>(null)
+  const [rpiNum, setRpiNum] = useState<number | null>(null)
 
   // Funil de vendas state
   const [funilRitmo, setFunilRitmo] = useState(1)
@@ -109,7 +128,7 @@ export default function CondutorRPI() {
   const [duvidasOutras, setDuvidasOutras] = useState('')
   const [andamentoNotes, setAndamentoNotes] = useState('')
   const [indicacoesCompromisso, setIndicacoesCompromisso] = useState('')
-  const [newLeads, setNewLeads] = useState<Array<{ nome_empresa: string; cnpj: string; demanda: string; dentro_farege: boolean }>>([])
+  const [newLeads, setNewLeads] = useState<Lead[]>([])
   const [newLeadForm, setNewLeadForm] = useState({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
 
   // Action plan
@@ -132,6 +151,13 @@ export default function CondutorRPI() {
   const { rpis, createRPI, updateRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
   const { playbooks } = usePlaybooks()
+
+  // S0-4: Toast if playbooks not loaded
+  useEffect(() => {
+    if (playbooks.length === 0) {
+      toast.warning('Playbooks não carregados.')
+    }
+  }, [playbooks])
 
   // Dynamic blocks based on checked dúvidas
   const blocks = useMemo(() => buildBlocks(duvidas, playbooks), [duvidas, playbooks])
@@ -192,37 +218,60 @@ export default function CondutorRPI() {
   }, [rpiId, duvidas, andamentoNotes, indicacoesCompromisso, newLeads, notasGerais, updateRPI])
 
   const startMeeting = async () => {
-    setStartTime(Date.now())
-    setCurrentBlockId('duvidas')
-    // Create RPI record
-    const rpi = await createRPI({
-      parceiro_id: parceiroId!,
-      data_reuniao: new Date().toISOString().split('T')[0],
-      tipo: rpis.length === 0 ? 'primeira' : 'regular',
-    })
-    if (rpi) setRpiId(rpi.id)
+    try {
+      // Create RPI record
+      const rpi = await createRPI({
+        parceiro_id: parceiroId!,
+        data_reuniao: new Date().toISOString().split('T')[0],
+        tipo: rpis.length === 0 ? 'primeira' : 'regular',
+      })
+      
+      if (!rpi) {
+        toast.error('Erro ao iniciar RPI. Tente novamente.')
+        return
+      }
+
+      setRpiId(rpi.id)
+      setRpiNum(rpi.numero_sequencial)
+      setStartTime(Date.now())
+      setCurrentBlockId('duvidas')
+    } catch (error) {
+      console.error('Error starting meeting:', error)
+      toast.error('Ocorreu um erro ao iniciar a sessão.')
+    }
   }
 
   // Add new lead from Block 4
   const addNewLead = async () => {
     if (!newLeadForm.nome_empresa.trim()) return
-    await createLead({
-      nome_empresa: newLeadForm.nome_empresa,
-      cnpj: newLeadForm.cnpj || null,
-      demanda: newLeadForm.demanda ? Number(newLeadForm.demanda) : null,
-      parceiro_id: parceiroId!,
-      dentro_farege: newLeadForm.dentro_farege,
-    })
-    setNewLeads((prev: any[]) => [...prev, { ...newLeadForm }])
-    setNewLeadForm({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
-    toast.success('Lead adicionado ao pipeline!')
+    try {
+      const result = await createLead({
+        nome_empresa: newLeadForm.nome_empresa,
+        cnpj: newLeadForm.cnpj || null,
+        demanda: newLeadForm.demanda ? Number(newLeadForm.demanda) : null,
+        parceiro_id: parceiroId!,
+        dentro_farege: newLeadForm.dentro_farege,
+      })
+
+      if (!result) {
+        toast.error('Erro ao salvar lead.')
+        return
+      }
+
+      setNewLeads((prev) => [...prev, result])
+      setNewLeadForm({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
+      toast.success('Lead adicionado ao pipeline!')
+    } catch (error) {
+      console.error('Error adding lead:', error)
+      toast.error('Ocorreu um erro ao salvar o lead.')
+    }
   }
 
   // Add new acao
   const addNewAcao = () => {
     if (!acaoForm.descricao.trim()) return
     setNewAcoes((prev: Partial<Acao>[]) => [...prev, { ...acaoForm, prazo: acaoForm.prazo || proximaRPI }])
-    setAcaoForm({ descricao: '', responsavel: 'Parceiro', prazo: '', prioridade: 'médio' as any, categoria: 'outro' as any })
+    setAcaoForm({ descricao: '', responsavel: 'Parceiro', prazo: '', prioridade: 'média', categoria: 'outro' })
   }
 
   // Generate deliverables text
@@ -232,7 +281,7 @@ export default function CondutorRPI() {
   ]
 
   const rpiData = {
-    numero_sequencial: rpis.length + 1,
+    numero_sequencial: rpiNum || rpis.length + 1,
     data_reuniao: new Date().toISOString().split('T')[0],
     notas_gerais: notasGerais,
     proxima_rpi_prevista: proximaRPI,
@@ -257,29 +306,29 @@ export default function CondutorRPI() {
       .filter((t: any) => duvidas[t.id]?.checked && t.playbook)
       .map((t: any) => t.playbook!)
 
-    // Update RPI
-    await updateRPI(rpiId, {
-      status: 'finalizada',
-      duracao_minutos: duration,
-      notas_gerais: notasGerais,
-      proxima_rpi_prevista: proximaRPI,
-      snapshot_leads_total: activeLeads.length,
-      snapshot_pipeline_total: totalDemanda,
-      snapshot_pipeline_ponderado: ponderado,
-      bloco_duvidas: duvidas as unknown as Record<string, unknown>,
-      bloco_andamento: { notes: andamentoNotes } as unknown as Record<string, unknown>,
-      bloco_indicacoes: { compromisso: indicacoesCompromisso } as unknown as Record<string, unknown>,
-      funil_vendas_ritmo: funilRitmo,
-      funil_vendas_snapshot: funilSnapshot,
-      playbooks_usados: playbooksUsados,
-      plano_acao_texto: planoText,
-      hubspot_texto: hubspotText,
-      relatorio_texto: relatorioText,
-    })
+    try {
+      // Update RPI
+      await updateRPI(rpiId, {
+        status: 'finalizada',
+        duracao_minutos: duration,
+        notas_gerais: notasGerais,
+        proxima_rpi_prevista: proximaRPI,
+        snapshot_leads_total: activeLeads.length,
+        snapshot_pipeline_total: totalDemanda,
+        snapshot_pipeline_ponderado: ponderado,
+        bloco_duvidas: duvidas as unknown as Record<string, unknown>,
+        bloco_andamento: { notes: andamentoNotes } as unknown as Record<string, unknown>,
+        bloco_indicacoes: { compromisso: indicacoesCompromisso } as unknown as Record<string, unknown>,
+        funil_vendas_ritmo: funilRitmo,
+        funil_vendas_snapshot: funilSnapshot,
+        playbooks_usados: playbooksUsados,
+        plano_acao_texto: planoText,
+        hubspot_texto: hubspotText,
+        relatorio_texto: relatorioText,
+      })
 
-    // Create new acoes in DB
-    for (const acao of newAcoes) {
-      await createAcao({
+      // Create new acoes in DB
+      const acaoPromises = newAcoes.map(acao => createAcao({
         rpi_id: rpiId,
         parceiro_id: parceiroId!,
         descricao: acao.descricao,
@@ -287,23 +336,36 @@ export default function CondutorRPI() {
         prazo: acao.prazo || null,
         prioridade: acao.prioridade,
         categoria: acao.categoria,
+      }))
+
+      // Update status of previous acoes
+      const updatePromises = Object.entries(previousAcoesStatus).map(([aId, status]) => {
+        const original = previousAcoes.find((a: Acao) => a.id === aId)
+        if (original && original.status !== status) {
+          return updateAcao(aId, {
+            status: status as Acao['status'],
+            data_conclusao: status === 'concluida' ? new Date().toISOString().split('T')[0] : null,
+          })
+        }
+        return Promise.resolve()
       })
-    }
 
-    // Update status of previous acoes
-    for (const [aId, status] of Object.entries(previousAcoesStatus)) {
-      const original = previousAcoes.find((a: Acao) => a.id === aId)
-      if (original && original.status !== status) {
-        await updateAcao(aId, {
-          status: status as Acao['status'],
-          data_conclusao: status === 'concluida' ? new Date().toISOString().split('T')[0] : null,
-        })
+      const results = await Promise.allSettled([...acaoPromises, ...updatePromises])
+      const hasErrors = results.some(r => r.status === 'rejected')
+      
+      if (hasErrors) {
+        toast.warning('Algumas ações não foram salvas. Verifique e tente novamente.')
+      } else {
+        toast.success('RPI finalizada com sucesso!')
       }
+      
+      setFinalizing(false)
+      navigate(`/parceiros/${parceiroId}`)
+    } catch (error) {
+      console.error('Error finalizing RPI:', error)
+      toast.error('Erro ao finalizar RPI. Verifique sua conexão.')
+      setFinalizing(false)
     }
-
-    toast.success('RPI finalizada com sucesso!')
-    setFinalizing(false)
-    navigate(`/parceiros/${parceiroId}`)
   }
 
   if (!parceiro) return <div className="text-center py-12 text-slate-400">Carregando...</div>

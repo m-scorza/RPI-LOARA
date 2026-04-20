@@ -245,3 +245,46 @@ SELECT
 FROM leads
 WHERE status != 'Perdido'
 GROUP BY parceiro_id;
+
+-- =============================================================
+402: -- SPRINT 0 — Schema Fixes
+403: -- =============================================================
+404: 
+405: -- Missing field in leads
+406: ALTER TABLE leads ADD COLUMN IF NOT EXISTS dentro_farege BOOLEAN DEFAULT TRUE;
+407: 
+408: -- Missing fields in rpis
+409: ALTER TABLE rpis ADD COLUMN IF NOT EXISTS funil_vendas_ritmo INTEGER DEFAULT NULL;
+410: ALTER TABLE rpis ADD COLUMN IF NOT EXISTS funil_vendas_snapshot JSONB DEFAULT NULL;
+411: ALTER TABLE rpis ADD COLUMN IF NOT EXISTS playbooks_usados TEXT[] DEFAULT '{}';
+412: 
+413: -- Playbooks table
+414: CREATE TABLE IF NOT EXISTS playbooks (
+415:   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+416:   slug TEXT UNIQUE NOT NULL,
+417:   titulo TEXT NOT NULL,
+418:   descricao TEXT,
+419:   conteudo JSONB NOT NULL DEFAULT '[]',
+420:   categoria TEXT,
+421:   ativo BOOLEAN DEFAULT TRUE,
+422:   ordem INTEGER DEFAULT 0,
+423:   created_at TIMESTAMPTZ DEFAULT NOW(),
+424:   updated_at TIMESTAMPTZ DEFAULT NOW()
+425: );
+426: CREATE INDEX idx_playbooks_slug ON playbooks(slug);
+427: CREATE INDEX idx_playbooks_ativo ON playbooks(ativo);
+428: 
+429: -- Playbook seeds
+430: INSERT INTO playbooks (slug, titulo, categoria, conteudo, ordem) VALUES
+431: ('farege', 'Processo de Indicação (FAREGE)', 'processo', '[{"tipo": "texto", "titulo": "O que é o FAREGE?", "corpo": "FAREGE é o método de indicação da LOARA: **F**iltrar, **A**bordar, **R**elacionar, **E**ntregar, **G**erir, **E**voluir. Cada etapa garante que a indicação seja qualificada e tenha alto potencial de conversão."}, {"tipo": "passo_a_passo", "titulo": "Como aplicar o FAREGE", "passos": [{"numero": 1, "titulo": "Filtrar", "descricao": "Identifique empresas com faturamento acima de R$ 500 mil/ano e necessidade de crédito."}, {"numero": 2, "titulo": "Abordar", "descricao": "Faça o primeiro contato apresentando a LOARA como parceira de soluções financeiras."}, {"numero": 3, "titulo": "Relacionar", "descricao": "Construa confiança antes de solicitar documentos. Entenda as dores do empresário."}, {"numero": 4, "titulo": "Entregar", "descricao": "Envie a indicação completa com dados da empresa e contato do decisor."}, {"numero": 5, "titulo": "Gerir", "descricao": "Acompanhe o status da indicação e mantenha o indicado informado."}, {"numero": 6, "titulo": "Evoluir", "descricao": "Aprenda com cada indicação para melhorar as próximas."}]}, {"tipo": "checklist", "titulo": "Checklist de indicação", "items": ["Nome completo da empresa", "CNPJ", "Nome do decisor", "Telefone de contato", "Faturamento estimado", "Demanda de crédito estimada"]}]', 0),
+431: ('varredura', 'Varredura e Documentação', 'processo', '[{"tipo": "texto", "titulo": "O que é a Varredura?", "corpo": "A Varredura é o processo de análise documental que identifica o potencial de crédito do cliente. Uma varredura bem feita acelera a aprovação e aumenta o valor liberado."}, {"tipo": "checklist", "titulo": "Documentos necessários", "items": ["Contrato social atualizado", "Faturamento dos últimos 12 meses", "Balanço patrimonial", "DRE do último exercício", "Certidões negativas (Federal, Estadual, Municipal)", "Relação de faturamento mensal"]}, {"tipo": "alerta", "titulo": "Atenção", "corpo": "Nunca solicite documentos por canais inseguros. Use sempre o portal da LOARA para upload de documentos sensíveis."}]', 1),
+431: ('inteligencia_credito', 'Inteligência de Crédito', 'credito', '[{"tipo": "texto", "titulo": "Inteligência de Crédito LOARA", "corpo": "Nossa equipe de inteligência analisa cada operação para encontrar as melhores condições. Entenda como funciona para orientar melhor seus indicados."}, {"tipo": "passo_a_passo", "titulo": "Fluxo de análise", "passos": [{"numero": 1, "titulo": "Recebimento", "descricao": "A documentação é recebida e conferida pela equipe."}, {"numero": 2, "titulo": "Análise preliminar", "descricao": "Score de crédito e viabilidade são avaliados em até 48h."}, {"numero": 3, "titulo": "Proposta", "descricao": "As melhores opções de crédito são apresentadas ao cliente."}, {"numero": 4, "titulo": "Formalização", "descricao": "Documentos são assinados e a operação é concluída."}]}]', 2),
+431: ('assessoria_mkt', 'Assessoria de Marketing', 'marketing', '[{"tipo": "texto", "titulo": "Assessoria de Marketing", "corpo": "A LOARA oferece suporte de marketing para parceiros Prata e Ouro. Utilize os materiais disponíveis para fortalecer sua marca e atrair mais indicações."}, {"tipo": "checklist", "titulo": "Materiais disponíveis", "items": ["Templates de posts para redes sociais", "Apresentação institucional personalizada", "Cases de sucesso para compartilhar", "Material para eventos e palestras"]}]', 3),
+431: ('processo_vendas', 'Processo de Vendas', 'vendas', '[{"tipo": "texto", "titulo": "Processo de Vendas", "corpo": "O sucesso na indicação depende de um processo de vendas consistente. Siga o ritmo recomendado para maximizar seus resultados."}, {"tipo": "passo_a_passo", "titulo": "Ciclo de vendas", "passos": [{"numero": 1, "titulo": "Prospecção", "descricao": "Identifique potenciais clientes na sua rede de contatos."}, {"numero": 2, "titulo": "Qualificação", "descricao": "Verifique se o potencial cliente tem perfil para crédito."}, {"numero": 3, "titulo": "Apresentação", "descricao": "Apresente as soluções da LOARA de forma consultiva."}, {"numero": 4, "titulo": "Indicação", "descricao": "Formalize a indicação com todos os dados necessários."}]}, {"tipo": "alerta", "titulo": "Dica", "corpo": "Mantenha um ritmo constante de prospecção. O modelo 4x4x4x4 ajuda a manter a disciplina necessária."}]', 4),
+431: ('prazos_sla', 'Prazos e SLAs', 'processo', '[{"tipo": "texto", "titulo": "Prazos e SLAs", "corpo": "Conheça os prazos de cada etapa para gerenciar expectativas com seus indicados."}, {"tipo": "passo_a_passo", "titulo": "Prazos por etapa", "passos": [{"numero": 1, "titulo": "Análise preliminar", "descricao": "Até 48 horas úteis após recebimento da documentação completa."}, {"numero": 2, "titulo": "Proposta de crédito", "descricao": "Até 5 dias úteis após aprovação preliminar."}, {"numero": 3, "titulo": "Formalização", "descricao": "Até 10 dias úteis após aceite da proposta."}, {"numero": 4, "titulo": "Liberação do crédito", "descricao": "Até 5 dias úteis após formalização completa."}]}, {"tipo": "alerta", "titulo": "Importante", "corpo": "Prazos podem variar conforme complexidade da operação. Documentação incompleta é a principal causa de atrasos."}]', 5),
+431: ('comissionamento', 'Comissionamento e Pagamentos', 'processo', '[{"tipo": "texto", "titulo": "Como funciona o comissionamento", "corpo": "Sua comissão é calculada sobre o volume de crédito efetivamente liberado. Entenda a fórmula e os prazos de pagamento."}, {"tipo": "texto", "titulo": "Fórmula de cálculo", "corpo": "Comissão = Volume de crédito x Taxa de comissão bruta x (1 - Imposto). Exemplo: R$ 800.000 x 1,415% x (1 - 21,38%) = R$ 8.902"}, {"tipo": "checklist", "titulo": "Para receber", "items": ["Nota fiscal emitida corretamente", "Dados bancários atualizados no sistema", "Operação finalizada e confirmada"]}]', 6)
+ON CONFLICT (slug) DO UPDATE SET
+  titulo = EXCLUDED.titulo,
+  categoria = EXCLUDED.categoria,
+  conteudo = EXCLUDED.conteudo,
+  ordem = EXCLUDED.ordem;
