@@ -35,8 +35,18 @@ export function calculateRevenueProjection(parceiro: Parceiro): RevenueProjectio
   const metaReceitaMensal = parceiro.meta_receita_mensal || 20000
   const metaReceitaAnual = metaReceitaMensal * 12
 
-  // Net commission per R$ of credit
-  const comissaoLiquida = parceiro.comissao_bruta * (1 - parceiro.imposto_comissao)
+  // COMMISSION MATH (Logical Chain)
+  // 1. Taxa Loara (e.g. 6%)
+  const taxaLoara = parceiro.taxa_loara || 0.06
+  // 2. Imposto (Loara pays 22% of gross)
+  const loaraNet = taxaLoara * 0.78
+  // 3. Share Parceiro (Prata 30%, Ouro 40%)
+  const share = parceiro.categoria === 'Ouro' ? 0.40 : 0.30
+  
+  // Final comissao_bruta for the partner
+  const comissaoBruta = loaraNet * share
+  // Net commission per R$ of credit (after partner's own taxes if any, usually same as comissaoBruta here)
+  const comissaoLiquida = comissaoBruta * (1 - (parceiro.imposto_comissao || 0.2138))
 
   // How much credit do we need to generate this revenue?
   const creditoNecessarioAnual = comissaoLiquida > 0 ? metaReceitaAnual / comissaoLiquida : 0
@@ -101,8 +111,23 @@ export function generateRevenueNarrative(
     `(${formatCurrency(projection.metaReceitaAnual)}/ano).`
   )
   lines.push('')
+  
+  const taxaLoara = parceiro.taxa_loara || 0.06
+  const loaraNet = taxaLoara * 0.78
+  const share = parceiro.categoria === 'Ouro' ? 0.40 : 0.30
+  const sharePonderado = loaraNet * share
+
   lines.push(
-    `Com a comissão líquida de ${(projection.comissaoLiquida * 100).toFixed(4)}% sobre o crédito, ` +
+    `Considerando a Taxa Loara de ${(taxaLoara * 100).toFixed(1)}% e impostos (22%), ` +
+    `a margem líquida Loara é de ${(loaraNet * 100).toFixed(2)}%.`
+  )
+  lines.push(
+    `Sua participação como Parceiro ${parceiro.categoria} é de ${(share * 100).toFixed(0)}% dessa margem, ` +
+    `resultando em uma comissão bruta de ${(sharePonderado * 100).toFixed(3)}% sobre o crédito.`
+  )
+  lines.push('')
+  lines.push(
+    `Com a comissão líquida final de ${(projection.comissaoLiquida * 100).toFixed(3)}%, ` +
     `você precisa movimentar ${formatCurrency(projection.creditoNecessarioMensal)}/mês em crédito.`
   )
   lines.push('')

@@ -63,6 +63,7 @@ export interface Parceiro {
   conv_doc_credito: number
   tempo_medio_fechamento: number
   meta_receita_mensal: number
+  taxa_loara: number
   status: StatusParceiro
   notas: string | null
   created_at: string

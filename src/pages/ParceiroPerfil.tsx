@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Play, Calendar, Users, Building2, FileText, Trash2, ChevronRight, Target, TrendingUp, Info, DollarSign, Settings } from 'lucide-react'
+import { toast } from 'sonner'
 import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
@@ -131,8 +132,19 @@ export default function ParceiroPerfil() {
         </div>
 
         <button
-          onClick={() => navigate(`/parceiros/${id}/rpi/nova`)}
-          className="inline-flex items-center gap-2 px-8 py-3.5 bg-teal-500 text-white text-sm font-black uppercase tracking-widest rounded-2xl hover:bg-teal-600 transition-all shadow-lg shadow-teal-500/20 active:scale-95"
+          onClick={() => {
+            if (parceiro.categoria === 'Bronze') {
+              toast.error('Parceiros Bronze não são elegíveis para sessões RPI.')
+              return
+            }
+            navigate(`/parceiros/${id}/rpi/nova`)
+          }}
+          disabled={parceiro.categoria === 'Bronze'}
+          className={`inline-flex items-center gap-2 px-8 py-3.5 text-white text-sm font-black uppercase tracking-widest rounded-2xl transition-all shadow-lg active:scale-95 ${
+            parceiro.categoria === 'Bronze' 
+              ? 'bg-slate-300 cursor-not-allowed shadow-none' 
+              : 'bg-teal-500 hover:bg-teal-600 shadow-teal-500/20'
+          }`}
         >
           <Play size={18} fill="currentColor" />
           Executar RPI

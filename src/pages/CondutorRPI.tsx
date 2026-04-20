@@ -218,6 +218,11 @@ export default function CondutorRPI() {
   }, [rpiId, duvidas, andamentoNotes, indicacoesCompromisso, newLeads, notasGerais, updateRPI])
 
   const startMeeting = async () => {
+    if (parceiro?.categoria === 'Bronze') {
+      toast.error('Parceiros Bronze não podem realizar RPIs.')
+      navigate(`/parceiros/${parceiroId}`)
+      return
+    }
     try {
       // Create RPI record
       const rpi = await createRPI({
@@ -784,7 +789,12 @@ export default function CondutorRPI() {
 
         {/* BLOCK: Comissões */}
         {currentBlock.id === 'comissoes' && (() => {
-          const comissaoLiq = parceiro.comissao_bruta * (1 - parceiro.imposto_comissao)
+          const taxaLoara = parceiro.taxa_loara || 0.06
+          const loaraNet = taxaLoara * 0.78
+          const share = parceiro.categoria === 'Ouro' ? 0.40 : 0.30
+          const sharePonderado = loaraNet * share
+          
+          const comissaoLiq = sharePonderado * (1 - (parceiro.imposto_comissao || 0.2138))
           const activeLeads = leads.filter(l => l.status === 'Ativo')
           
           const pipelinePonderado = activeLeads.reduce((s, l) => s + (l.demanda || 0) * (l.probabilidade || 0) * comissaoLiq, 0)
@@ -794,11 +804,34 @@ export default function CondutorRPI() {
             <div className="space-y-10 max-w-4xl mx-auto">
               <div className="space-y-2 text-center">
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Comissões e Resultados</h2>
-                <p className="text-slate-500 font-medium">Veja o retorno financeiro gerado pelo seu trabalho.</p>
+                <p className="text-slate-500 font-medium">Transparência total sobre a régua de ganhos da parceria.</p>
+              </div>
+
+              {/* Logical Chain Display */}
+              <div className="grid grid-cols-3 gap-1 bg-slate-900 p-2 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-tr from-teal-500/10 to-transparent pointer-events-none" />
+                
+                <div className="bg-slate-800/50 rounded-[2rem] p-6 text-center border border-white/5">
+                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Taxa Loara</p>
+                  <p className="text-2xl font-black text-white">{(taxaLoara * 100).toFixed(1)}%</p>
+                  <p className="text-[10px] text-slate-600 font-medium mt-1">Margem Gross</p>
+                </div>
+
+                <div className="bg-slate-800/50 rounded-[2rem] p-6 text-center border border-white/5">
+                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Loara Net (78%)</p>
+                  <p className="text-2xl font-black text-blue-400">{(loaraNet * 100).toFixed(2)}%</p>
+                  <p className="text-[10px] text-slate-600 font-medium mt-1">Pós-Impostos</p>
+                </div>
+
+                <div className="bg-teal-500/10 rounded-[2rem] p-6 text-center border border-teal-500/20">
+                  <p className="text-[9px] font-black text-teal-500 uppercase tracking-widest mb-1">Sua Parte ({ (share * 100).toFixed(0) }%)</p>
+                  <p className="text-2xl font-black text-teal-400">{(sharePonderado * 100).toFixed(3)}%</p>
+                  <p className="text-[10px] text-teal-600/50 font-medium mt-1">Comissão Bruta Partner</p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Historico - Placeholder logic using current rpi snapshot data if available or simulated */}
+                {/* Historico */}
                 <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm">
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
                     <Clock size={12} /> Histórico de Ganhos

@@ -31,6 +31,7 @@ CREATE TABLE parceiros (
   meta_receita_mensal DECIMAL(15,2) DEFAULT 20000,
 
   status TEXT DEFAULT 'ativo' CHECK (status IN ('ativo', 'inativo', 'churned')),
+  taxa_loara DECIMAL(6,4) DEFAULT 0.06,
   notas TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

@@ -24,6 +24,7 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
     meta_anual_credito: parceiro?.meta_anual_credito ?? 10000000,
     meta_anual_clientes: parceiro?.meta_anual_clientes ?? 12,
     tiquete_medio: parceiro?.tiquete_medio ?? 800000,
+    taxa_loara: parceiro?.taxa_loara ?? 0.06,
     taxa_produto: parceiro?.taxa_produto ?? 0.06,
     comissao_bruta: parceiro?.comissao_bruta ?? 0.0141516,
     imposto_comissao: parceiro?.imposto_comissao ?? 0.2138,
@@ -43,16 +44,20 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
   const set = (field: string, value: string | number) => setForm((f) => ({ ...f, [field]: value }))
 
   // Live revenue projection based on current form values
-  const projection = useMemo(() => {
+    const loaraNet = form.taxa_loara * 0.78
+    const share = form.categoria === 'Ouro' ? 0.40 : form.categoria === 'Prata' ? 0.30 : 0
+    const partnerGross = loaraNet * share
+    
     const fakeParceiro = {
       ...form,
+      comissao_bruta: partnerGross,
       meta_receita_mensal: form.meta_receita_mensal,
     } as Parceiro
     return calculateRevenueProjection(fakeParceiro)
   }, [
     form.meta_receita_mensal,
-    form.comissao_bruta,
-    form.imposto_comissao,
+    form.taxa_loara,
+    form.categoria,
     form.tiquete_medio,
     form.conv_lead_qualificado,
     form.conv_qualificado_oportunidade,
@@ -214,20 +219,47 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
             {showFinanceiro && (
               <div className="grid grid-cols-3 gap-4 mt-3">
                 <div>
+                  <label className={labelCls}>Taxa Loara (%)</label>
+                  <input type="number" step="0.01" min="0" max="1" value={form.taxa_loara} onChange={(e) => set('taxa_loara', Number(e.target.value))} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Imposto Comissão (Dedução Loara 22%)</label>
+                  <div className={inputCls + ' bg-slate-50 text-slate-500 flex items-center'}>22.00% (fixo)</div>
+                </div>
+                <div>
+                  <label className={labelCls}>Share Parceiro</label>
+                  <div className={inputCls + ' bg-slate-50 text-slate-500 flex items-center'}>
+                    {form.categoria === 'Ouro' ? '40%' : form.categoria === 'Prata' ? '30%' : '0%'}
+                  </div>
+                </div>
+                <div className="col-span-3 p-4 bg-slate-900 rounded-xl text-white space-y-2">
+                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Raciocínio Lógico da Comissão</p>
+                   <div className="flex items-center justify-between">
+                     <div className="text-center flex-1">
+                       <p className="text-lg font-black">{ (form.taxa_loara * 100).toFixed(1) }%</p>
+                       <p className="text-[9px] text-slate-500 uppercase">Loara Bruto</p>
+                     </div>
+                     <div className="text-slate-700">→</div>
+                     <div className="text-center flex-1">
+                       <p className="text-lg font-black text-blue-400">{ (form.taxa_loara * 0.78 * 100).toFixed(2) }%</p>
+                       <p className="text-[9px] text-slate-500 uppercase">Após 22% Imp.</p>
+                     </div>
+                     <div className="text-slate-700">→</div>
+                     <div className="text-center flex-1">
+                       <p className="text-lg font-black text-teal-400">
+                         { (form.taxa_loara * 0.78 * (form.categoria === 'Ouro' ? 0.4 : form.categoria === 'Prata' ? 0.3 : 0) * 100).toFixed(3) }%
+                       </p>
+                       <p className="text-[9px] text-slate-500 uppercase">Seu Ganho ({form.categoria === 'Ouro' ? '40%' : '30%'})</p>
+                     </div>
+                   </div>
+                </div>
+                <div>
                   <label className={labelCls}>Tíquete Médio (R$)</label>
                   <input type="number" value={form.tiquete_medio} onChange={(e) => set('tiquete_medio', Number(e.target.value))} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Taxa Produto</label>
+                  <label className={labelCls}>Taxa Produto (Spread)</label>
                   <input type="number" step="0.0001" value={form.taxa_produto} onChange={(e) => set('taxa_produto', Number(e.target.value))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Comissão Bruta</label>
-                  <input type="number" step="0.000001" value={form.comissao_bruta} onChange={(e) => set('comissao_bruta', Number(e.target.value))} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Imposto Comissão</label>
-                  <input type="number" step="0.0001" value={form.imposto_comissao} onChange={(e) => set('imposto_comissao', Number(e.target.value))} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Tempo Médio Fechamento (dias)</label>
