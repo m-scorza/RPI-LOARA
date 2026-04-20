@@ -1,15 +1,25 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus, ChevronRight, HelpCircle, BookOpen, Activity, Target, Zap, Layout as LayoutIcon, ClipboardList, Flag, Users, ShieldCheck, TrendingUp, AlertCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus, ChevronRight, HelpCircle, BookOpen, Activity, Target, Zap, Layout as LayoutIcon, ClipboardList, Flag, Users, ShieldCheck, TrendingUp, AlertCircle, Download } from 'lucide-react'
 import { useRPIStore } from '../stores/rpiStore'
+import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
 import { useRPIs } from '../hooks/useRPIs'
 import { useAcoes } from '../hooks/useAcoes'
+import { useAcompanhamento } from '../hooks/useAcompanhamento'
 import { usePlaybooks } from '../hooks/usePlaybooks'
 import { formatCurrency, formatDate } from '../lib/format'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import * as Dialog from '@radix-ui/react-dialog'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 import { generateHubSpotText, generatePlanoAcaoText, generateRelatorioText } from '../lib/generators'
+import { generateWithAI, type DeliverableType } from '../lib/aiGenerators'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
 import type { Parceiro, Lead, Acao, Responsavel, Prioridade, CategoriaAcao, FunilVendasSnapshot, Playbook } from '../types/database'
 import { ETAPAS_FUNIL } from '../types/database'
@@ -85,6 +95,25 @@ const DUVIDAS_CHECKLIST = [
   { id: 'outros', label: 'Outros', playbook: null },
 ]
 
+const LeadFormSchema = z.object({
+  nome_empresa: z.string().min(1, 'Nome da empresa é obrigatório'),
+  cnpj: z.string().optional(),
+  demanda: z.coerce.number().optional().nullable(),
+  dentro_farege: z.boolean().default(true),
+})
+
+type LeadFormData = z.infer<typeof LeadFormSchema>
+
+const AcaoFormSchema = z.object({
+  descricao: z.string().min(1, 'Descrição é obrigatória'),
+  responsavel: z.enum(['Parceiro', 'Gerente', 'Ambos']),
+  prazo: z.string().optional(),
+  prioridade: z.enum(['alta', 'média', 'baixa']),
+  categoria: z.enum(['indicação', 'documentação', 'treinamento', 'processo', 'relacionamento', 'outro']),
+})
+
+type AcaoFormData = z.infer<typeof AcaoFormSchema>
+
 function Timer({ startTime }: { startTime: number | null }) {
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
@@ -132,6 +161,7 @@ export default function CondutorRPI() {
     newAcoes,
     notasGerais,
     proximaRPI,
+    maxVisitedBlockIndex,
     startSession,
     updateData,
     setCurrentBlock,
@@ -139,21 +169,56 @@ export default function CondutorRPI() {
   } = useRPIStore()
 
   const [parceiro, setParceiro] = useState<Parceiro | null>(null)
-  const [newLeadForm, setNewLeadForm] = useState({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
+  const [lastRPI, setLastRPI] = useState<RPI | null>(null)
+
+  const { 
+    register: registerLead, 
+    handleSubmit: handleLeadSubmit, 
+    reset: resetLeadForm,
+    formState: { errors: leadErrors }
+  } = useForm<LeadFormData>({
+    resolver: zodResolver(LeadFormSchema),
+    defaultValues: { dentro_farege: true }
+  })
 
   // Action plan local state (UI only)
   const [previousAcoes, setPreviousAcoes] = useState<Acao[]>([])
-  const [acaoForm, setAcaoForm] = useState({ descricao: '', responsavel: 'Parceiro' as Responsavel, prazo: '', prioridade: 'média' as Prioridade, categoria: 'outro' as CategoriaAcao })
+  
+  const { 
+    register: registerAcao, 
+    handleSubmit: handleAcaoSubmit, 
+    reset: resetAcaoForm,
+    setValue: setAcaoValue,
+    formState: { errors: acaoErrors }
+  } = useForm<AcaoFormData>({
+    resolver: zodResolver(AcaoFormSchema),
+    defaultValues: { 
+      responsavel: 'Parceiro', 
+      prioridade: 'média', 
+      categoria: 'outro' 
+    }
+  })
 
   // UI state
-  const [showEntregaveis, setShowEntregaveis] = useState(false)
   const [entregavelTab, setEntregavelTab] = useState(0)
   const [finalizing, setFinalizing] = useState(false)
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
+  const [direction, setDirection] = useState(0) // 1 for forward, -1 for back
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  // AI-generated results state
+  const [generatedTexts, setGeneratedTexts] = useState<Record<DeliverableType, string>>({
+    plano_acao: '',
+    relatorio: '',
+    hubspot: ''
+  })
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
 
   const { getParceiro } = useParceiros()
   const { leads, createLead, moveLead } = useLeads(parceiroId || '')
-  const { rpis, createRPI, updateRPI } = useRPIs(parceiroId || '')
+  const { rpis, createRPI, updateRPI, getLastRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
+  const { historico: acompHistorico } = useAcompanhamento(parceiroId || '')
   const { playbooks } = usePlaybooks()
 
   // S0-4: Toast if playbooks not loaded
@@ -170,8 +235,18 @@ export default function CondutorRPI() {
   const canGoBack = blockIndex > 0
   const canGoForward = blockIndex < blocks.length - 1
 
-  const goBack = () => { if (canGoBack) setCurrentBlock(blocks[blockIndex - 1].id) }
-  const goForward = () => { if (canGoForward) setCurrentBlock(blocks[blockIndex + 1].id) }
+  const goBack = () => { 
+    if (canGoBack) {
+      setDirection(-1)
+      setCurrentBlock(blocks[blockIndex - 1].id, blockIndex - 1) 
+    }
+  }
+  const goForward = () => { 
+    if (canGoForward) {
+      setDirection(1)
+      setCurrentBlock(blocks[blockIndex + 1].id, blockIndex + 1) 
+    }
+  }
 
   const handleFunilRitmoChange = useCallback((ritmo: number, snapshot: FunilVendasSnapshot) => {
     updateData({ funilRitmo: ritmo, funilSnapshot: snapshot })
@@ -197,7 +272,10 @@ export default function CondutorRPI() {
     getParceiro(parceiroId).then((data: Parceiro | null) => {
       setParceiro(data)
     })
-  }, [parceiroId, getParceiro])
+    getLastRPI().then((data: RPI | null) => {
+      setLastRPI(data)
+    })
+  }, [parceiroId, getParceiro, getLastRPI])
 
   // Load previous pending actions
   useEffect(() => {
@@ -262,15 +340,14 @@ export default function CondutorRPI() {
   }
 
   // Add new lead from Block 4
-  const addNewLead = async () => {
-    if (!newLeadForm.nome_empresa.trim()) return
+  const addNewLead = async (data: LeadFormData) => {
     try {
       const result = await createLead({
-        nome_empresa: newLeadForm.nome_empresa,
-        cnpj: newLeadForm.cnpj || null,
-        demanda: newLeadForm.demanda ? Number(newLeadForm.demanda) : null,
+        nome_empresa: data.nome_empresa,
+        cnpj: data.cnpj || null,
+        demanda: data.demanda || null,
         parceiro_id: parceiroId!,
-        dentro_farege: newLeadForm.dentro_farege,
+        dentro_farege: data.dentro_farege,
       })
 
       if (!result) {
@@ -279,7 +356,7 @@ export default function CondutorRPI() {
       }
 
       updateData({ newLeads: [...newLeads, result] })
-      setNewLeadForm({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
+      resetLeadForm({ nome_empresa: '', cnpj: '', demanda: null, dentro_farege: true })
       toast.success('Lead adicionado ao pipeline!')
     } catch (error) {
       console.error('Error adding lead:', error)
@@ -288,10 +365,9 @@ export default function CondutorRPI() {
   }
 
   // Add new acao
-  const addNewAcao = () => {
-    if (!acaoForm.descricao.trim()) return
-    updateData({ newAcoes: [...newAcoes, { ...acaoForm, prazo: acaoForm.prazo || proximaRPI }] })
-    setAcaoForm({ descricao: '', responsavel: 'Parceiro', prazo: '', prioridade: 'média', categoria: 'outro' })
+  const addNewAcao = (data: AcaoFormData) => {
+    updateData({ newAcoes: [...newAcoes, { ...data, prazo: data.prazo || proximaRPI }] })
+    resetAcaoForm({ descricao: '', responsavel: 'Parceiro', prazo: '', prioridade: 'média', categoria: 'outro' })
   }
 
   // Generate deliverables text
@@ -307,9 +383,67 @@ export default function CondutorRPI() {
     proxima_rpi_prevista: proximaRPI,
   }
 
-  const hubspotText = parceiro ? generateHubSpotText(parceiro, rpiData, allAcoes, leads, andamentoNotes) : ''
-  const planoText = parceiro ? generatePlanoAcaoText(parceiro, rpiData, allAcoes) : ''
-  const relatorioText = parceiro ? generateRelatorioText(parceiro, rpiData, leads, allAcoes) : ''
+  const handleGenerateAI = async (forceType?: DeliverableType) => {
+    if (!parceiro) return
+    setIsGeneratingAI(true)
+    
+    const context = {
+      parceiro,
+      rpiData,
+      leads,
+      acoes: allAcoes,
+      discussionNotes: andamentoNotes,
+      duvidasChecklist: duvidas
+    }
+
+    try {
+      if (forceType) {
+        const text = await generateWithAI(context, forceType)
+        setGeneratedTexts(prev => ({ ...prev, [forceType]: text }))
+      } else {
+        const [plano, rel, hub] = await Promise.all([
+          generateWithAI(context, 'plano_acao'),
+          generateWithAI(context, 'relatorio'),
+          generateWithAI(context, 'hubspot')
+        ])
+        setGeneratedTexts({ plano_acao: plano, relatorio: rel, hubspot: hub })
+      }
+    } catch (error) {
+      console.error('Error generating deliverables:', error)
+      toast.error('Erro ao gerar entregáveis.')
+    } finally {
+      setIsGeneratingAI(false)
+    }
+  }
+
+  const handleDownloadPDF = async () => {
+    if (!contentRef.current || !parceiro) return
+    setIsExportingPDF(true)
+    try {
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#F8FAFC'
+      })
+      
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width / 2, canvas.height / 2]
+      })
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2)
+      pdf.save(`RPI_${parceiro.nome.replace(/\s+/g, '_')}_${formatDate(new Date().toISOString())}.pdf`)
+      toast.success('PDF gerado com sucesso!')
+    } catch (error) {
+      console.error('Error generating PDF:', error)
+      toast.error('Erro ao gerar PDF.')
+    } finally {
+      setIsExportingPDF(false)
+    }
+  }
 
   // Finalize RPI
   const finalizarRPI = async () => {
@@ -418,13 +552,17 @@ export default function CondutorRPI() {
                 {blocks.map((b: Block, i: number) => (
                   <button
                     key={b.id}
-                    onClick={() => { if (startTime || b.id === 'prep') setCurrentBlock(b.id) }}
+                    onClick={() => { 
+                      if (b.id === 'prep' || (startTime && i <= maxVisitedBlockIndex)) {
+                        setCurrentBlock(b.id, i) 
+                      }
+                    }}
                     className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
                       currentBlockId === b.id
                         ? 'bg-[#0F172A] text-white shadow-md'
-                        : blockIndex > i
+                        : i <= maxVisitedBlockIndex
                         ? 'text-teal-600 hover:bg-teal-50'
-                        : 'text-slate-400 opacity-60'
+                        : 'text-slate-400 opacity-60 cursor-not-allowed'
                     }`}
                   >
                   {blockIndex > i && <div className="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 text-white rounded-full flex items-center justify-center border-2 border-white"><Check size={8} /></div>}
@@ -441,7 +579,16 @@ export default function CondutorRPI() {
       </div>
 
       <div className="flex-1 p-8 lg:p-12 overflow-y-auto">
-        <div className="max-w-6xl mx-auto animate-fade-in pb-24">
+        <div className="max-w-6xl mx-auto pb-24">
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={currentBlock.id}
+              custom={direction}
+              initial={{ opacity: 0, x: direction * 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: direction * -50 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+            >
 
         {/* BLOCK: Preparação */}
         {currentBlock.id === 'prep' && (() => {
@@ -465,7 +612,7 @@ export default function CondutorRPI() {
                       </div>
                     </div>
                     <button
-                      onClick={() => setCurrentBlock('duvidas')}
+                      onClick={() => setCurrentBlock('duvidas', 1)}
                       className="px-6 py-2.5 bg-[#0F172A] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all shadow-md"
                     >
                       Retomar Sessão
@@ -478,8 +625,6 @@ export default function CondutorRPI() {
                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Saúde: Engajado</span>
                      </div>
                    )}
-                </div>
-              </div>
 
               {/* Revenue goal narrative */}
               <div className="relative group overflow-hidden">
@@ -741,6 +886,11 @@ export default function CondutorRPI() {
           <FunilVendas
             parceiro={parceiro}
             ritmoInicial={funilRitmo}
+            dadosReais={leads.length >= 5 && lastRPI?.funil_vendas_snapshot ? {
+              cadastrosDiaMedio: lastRPI.funil_vendas_snapshot.cadastros_dia || 0,
+              reunioesSemanaMedia: lastRPI.funil_vendas_snapshot.reunioes_semana || 0,
+              clientesMesMedia: lastRPI.funil_vendas_snapshot.clientes_mes || 0
+            } : undefined}
             onRitmoChange={handleFunilRitmoChange}
           />
         )}
@@ -776,43 +926,42 @@ export default function CondutorRPI() {
 
                 <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 shadow-sm space-y-4">
                   <div className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="Empresa *" 
-                      value={newLeadForm.nome_empresa} 
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewLeadForm((f: any) => ({ ...f, nome_empresa: e.target.value }))} 
-                      className="w-full px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm"
-                    />
+                    <div className="space-y-1">
+                      <input 
+                        type="text" 
+                        placeholder="Empresa *" 
+                        {...registerLead('nome_empresa')}
+                        className={`w-full px-5 py-3.5 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm ${leadErrors.nome_empresa ? 'border-rose-500' : 'border-slate-100'}`}
+                      />
+                      {leadErrors.nome_empresa && <p className="text-[10px] font-black text-rose-500 uppercase ml-2">{leadErrors.nome_empresa.message}</p>}
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-3">
                       <input 
                         type="text" 
                         placeholder="CNPJ" 
-                        value={newLeadForm.cnpj} 
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewLeadForm((f: any) => ({ ...f, cnpj: e.target.value }))} 
+                        {...registerLead('cnpj')}
                         className="px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm"
                       />
                       <input 
                         type="number" 
                         placeholder="Demanda R$" 
-                        value={newLeadForm.demanda} 
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewLeadForm((f: any) => ({ ...f, demanda: e.target.value }))} 
+                        {...registerLead('demanda')}
                         className="px-5 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm"
                       />
                     </div>
                     <label className="flex items-center gap-3 px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all">
                       <input 
                         type="checkbox" 
-                        checked={newLeadForm.dentro_farege}
-                        onChange={(e) => setNewLeadForm((f: any) => ({ ...f, dentro_farege: e.target.checked }))}
+                        {...registerLead('dentro_farege')}
                         className="w-4 h-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                       />
                       <span className="text-xs font-black text-slate-600 uppercase tracking-widest">Processo FAREGE</span>
                     </label>
                   </div>
                   <button 
-                    onClick={addNewLead} 
-                    disabled={!newLeadForm.nome_empresa.trim()} 
-                    className="w-full flex items-center justify-center gap-2 py-4 bg-teal-500 text-white font-black rounded-2xl hover:bg-teal-600 shadow-lg shadow-teal-500/20 active:scale-95 transition-all disabled:opacity-30 disabled:grayscale uppercase tracking-widest text-xs"
+                    onClick={handleLeadSubmit(addNewLead)} 
+                    className="w-full flex items-center justify-center gap-2 py-4 bg-teal-500 text-white font-black rounded-2xl hover:bg-teal-600 shadow-lg shadow-teal-500/20 active:scale-95 transition-all uppercase tracking-widest text-xs"
                   >
                     <Plus size={16} /> Adicionar ao Pitch
                   </button>
@@ -911,21 +1060,52 @@ export default function CondutorRPI() {
                   <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
                     <Clock size={12} /> Histórico de Ganhos
                   </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-end gap-2 h-32 pt-4">
-                      {[35, 45, 30, 60, 40, 55].map((h, i) => (
-                        <div key={i} className="flex-1 bg-slate-50 rounded-lg relative group overflow-hidden">
-                          <div 
-                            className="absolute bottom-0 left-0 right-0 bg-teal-500/20 group-hover:bg-teal-500/40 transition-all" 
-                            style={{ height: `${h}%` }}
+                  
+                  {acompHistorico.length > 0 ? (
+                    <div className="h-48 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart 
+                          data={[...acompHistorico].reverse().map(h => ({ 
+                            name: `${String(h.mes).padStart(2, '0')}/${h.ano % 100}`, 
+                            valor: h.comissao_realizada 
+                          }))}
+                        >
+                          <XAxis 
+                            dataKey="name" 
+                            axisLine={false} 
+                            tickLine={false} 
+                            tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 800 }} 
                           />
-                        </div>
-                      ))}
+                          <Tooltip 
+                            cursor={{ fill: '#f8fafc' }}
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl shadow-xl">
+                                    <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">{payload[0].payload.name}</p>
+                                    <p className="text-xs font-black text-white">{formatCurrency(Number(payload[0].value))}</p>
+                                  </div>
+                                )
+                              }
+                              return null
+                            }}
+                          />
+                          <Bar dataKey="valor" radius={[6, 6, 6, 6]} barSize={32}>
+                            {acompHistorico.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={index === acompHistorico.length - 1 ? '#2DD4BF' : '#F1F5F9'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
-                    <div className="flex justify-between text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">
-                      <span>Out</span><span>Nov</span><span>Dez</span><span>Jan</span><span>Fev</span><span>Mar</span>
+                  ) : (
+                    <div className="h-48 flex flex-col items-center justify-center text-center space-y-3 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                      <div className="p-3 bg-white rounded-2xl text-slate-300 shadow-sm">
+                        <Activity size={24} />
+                      </div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nenhum histórico disponível.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Projeção */}
@@ -1020,8 +1200,8 @@ export default function CondutorRPI() {
                        </select>
                      </div>
                    ))}
-                 </div>
-              </div>
+                </div>
+                </div>
             )}
 
             {/* Sugestões Contextuais */}
@@ -1046,7 +1226,8 @@ export default function CondutorRPI() {
                           </div>
                           <button 
                             onClick={() => {
-                              setAcaoForm(f => ({ ...f, descricao: `Resolver barreira: ${item?.label}`, categoria: item?.playbook ? 'treinamento' : 'processo' as any }))
+                              setAcaoValue('descricao', `Resolver barreira: ${item?.label}`)
+                              setAcaoValue('categoria', item?.playbook ? 'treinamento' : 'processo' as any)
                               toast.success('Sugestão aplicada!')
                             }}
                             className="p-2 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
@@ -1064,7 +1245,8 @@ export default function CondutorRPI() {
                         </div>
                         <button 
                           onClick={() => {
-                            setAcaoForm(f => ({ ...f, descricao: "Realizar campanha de prospecção focada em novos leads (Aceleração de Ritmo)", categoria: 'indicação' }))
+                            setAcaoValue('descricao', "Realizar campanha de prospecção focada em novos leads (Aceleração de Ritmo)")
+                            setAcaoValue('categoria', 'indicação')
                             toast.success('Sugestão aplicada!')
                           }}
                           className="p-2 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-xl transition-all"
@@ -1088,18 +1270,20 @@ export default function CondutorRPI() {
               </div>
               
               <div className="grid grid-cols-1 gap-4">
-                <input 
-                  type="text" 
-                  placeholder="O que precisa ser feito? *" 
-                  value={acaoForm.descricao} 
-                  onChange={(e) => setAcaoForm((f) => ({ ...f, descricao: e.target.value }))} 
-                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm"
-                />
+                <div className="space-y-1">
+                  <input 
+                    type="text" 
+                    placeholder="O que precisa ser feito? *" 
+                    {...registerAcao('descricao')}
+                    className={`w-full px-6 py-4 bg-slate-50 border rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all font-medium text-sm ${acaoErrors.descricao ? 'border-rose-500' : 'border-slate-100'}`}
+                  />
+                  {acaoErrors.descricao && <p className="text-[10px] font-black text-rose-500 uppercase ml-2">{acaoErrors.descricao.message}</p>}
+                </div>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Responsável</label>
-                    <select value={acaoForm.responsavel} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAcaoForm((f: any) => ({ ...f, responsavel: e.target.value as Responsavel }))} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
+                    <select {...registerAcao('responsavel')} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
                       <option value="Parceiro">Parceiro</option>
                       <option value="Gerente">Gerente</option>
                       <option value="Ambos">Ambos</option>
@@ -1107,11 +1291,11 @@ export default function CondutorRPI() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Prazo</label>
-                    <input type="date" value={acaoForm.prazo} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAcaoForm((f: any) => ({ ...f, prazo: e.target.value }))} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700" />
+                    <input type="date" {...registerAcao('prazo')} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Prioridade</label>
-                    <select value={acaoForm.prioridade} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAcaoForm((f: any) => ({ ...f, prioridade: e.target.value as Prioridade }))} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
+                    <select {...registerAcao('prioridade')} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
                       <option value="alta">Alta</option>
                       <option value="média">Média</option>
                       <option value="baixa">Baixa</option>
@@ -1119,7 +1303,7 @@ export default function CondutorRPI() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Categoria</label>
-                    <select value={acaoForm.categoria} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAcaoForm((f: any) => ({ ...f, categoria: e.target.value as CategoriaAcao }))} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
+                    <select {...registerAcao('categoria')} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none text-xs font-bold text-slate-700">
                       <option value="indicação">Indicação</option>
                       <option value="documentação">Documentação</option>
                       <option value="treinamento">Treinamento</option>
@@ -1132,9 +1316,8 @@ export default function CondutorRPI() {
               </div>
               
               <button 
-                onClick={addNewAcao} 
-                disabled={!acaoForm.descricao.trim()} 
-                className="w-full py-4 bg-[#0F172A] text-white font-black rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-[0.98] transition-all disabled:opacity-30 uppercase tracking-[0.2em] text-[10px]"
+                onClick={handleAcaoSubmit(addNewAcao)} 
+                className="w-full py-4 bg-[#0F172A] text-white font-black rounded-2xl hover:bg-slate-800 shadow-xl shadow-slate-200 active:scale-[0.98] transition-all uppercase tracking-[0.2em] text-[10px]"
               >
                 Gerar Nova Ação
               </button>
@@ -1249,7 +1432,10 @@ export default function CondutorRPI() {
 
               <div className="flex flex-col md:flex-row gap-4 pt-6 border-t border-slate-100">
                 <button
-                  onClick={() => setShowEntregaveis(true)}
+                  onClick={() => {
+                    handleGenerateAI()
+                    setShowEntregaveis(true)
+                  }}
                   className="flex-1 flex items-center justify-center gap-3 px-8 py-5 bg-white border border-slate-200 text-slate-800 font-black rounded-2xl hover:bg-slate-50 transition-all uppercase tracking-widest text-[10px]"
                 >
                   <BookOpen size={18} /> Visualizar Entregáveis
@@ -1266,41 +1452,45 @@ export default function CondutorRPI() {
           </div>
         )}
 
-        {/* Navigation */}
-        {currentBlock.id !== 'prep' && !currentBlock.playbook && (
-          <div className="max-w-4xl mx-auto flex justify-between mt-12 pt-8 border-t border-slate-100">
-            <button 
-              onClick={goBack} 
-              disabled={!canGoBack} 
-              className="flex items-center gap-3 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-800 disabled:opacity-30 transition-all active:scale-95"
-            >
-              <ArrowLeft size={16} /> Voltar
-            </button>
-            {canGoForward && (
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Navigation */}
+          {currentBlock.id !== 'prep' && !currentBlock.playbook && (
+            <div className="max-w-4xl mx-auto flex justify-between mt-12 pt-8 border-t border-slate-100">
               <button 
-                onClick={goForward} 
-                className="flex items-center gap-3 px-10 py-4 bg-white border border-slate-100 shadow-sm rounded-2xl text-xs font-black uppercase tracking-[0.2em] text-teal-600 hover:shadow-md hover:border-teal-500/20 transition-all active:scale-95"
+                onClick={goBack} 
+                disabled={!canGoBack} 
+                className="flex items-center gap-3 px-6 py-3 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-800 disabled:opacity-30 transition-all active:scale-95"
               >
-                Prosseguir <ArrowRight size={16} />
+                <ArrowLeft size={16} /> Voltar
               </button>
-            )}
-          </div>
-        )}
+              {canGoForward && (
+                <button 
+                  onClick={goForward} 
+                  className="flex items-center gap-3 px-10 py-4 bg-white border border-slate-100 shadow-sm rounded-2xl text-xs font-black uppercase tracking-[0.2em] text-teal-600 hover:shadow-md hover:border-teal-500/20 transition-all active:scale-95"
+                >
+                  Prosseguir <ArrowRight size={16} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Entregáveis Modal */}
-      {showEntregaveis && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden border border-white/20">
+      <Dialog.Root open={showEntregaveis} onOpenChange={setShowEntregaveis}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm animate-fade-in" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-4xl max-h-[90vh] flex flex-col bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 animate-zoom-in">
             <div className="flex items-center justify-between px-10 py-8 border-b border-slate-50">
               <div>
-                <h2 className="text-2xl font-black text-slate-800 tracking-tighter leading-none">Entregáveis da Sessão</h2>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{parceiro.nome} — RPI #{rpis.length + 1}</p>
+                <Dialog.Title className="text-2xl font-black text-slate-800 tracking-tighter leading-none">Entregáveis da Sessão</Dialog.Title>
+                <Dialog.Description className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{parceiro.nome} — RPI #{rpis.length + 1}</Dialog.Description>
               </div>
-              <button onClick={() => setShowEntregaveis(false)} className="p-3 bg-slate-50 text-slate-400 hover:text-slate-800 rounded-2xl transition-all">
+              <Dialog.Close className="p-3 bg-slate-50 text-slate-400 hover:text-slate-800 rounded-2xl transition-all">
                 <X size={20} />
-              </button>
+              </Dialog.Close>
             </div>
 
             {/* Tabs */}
@@ -1322,30 +1512,65 @@ export default function CondutorRPI() {
 
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-10 py-8 bg-slate-50">
-              <div className="bg-white rounded-[2rem] p-8 shadow-inner min-h-full border border-slate-200/50">
-                <EntregavelFormatado
-                  tipo={entregavelTab === 0 ? 'plano' : entregavelTab === 1 ? 'relatorio' : 'hubspot'}
-                  parceiro={parceiro}
-                  rpiData={rpiData}
-                  acoes={allAcoes}
-                  leads={leads}
-                  discussionNotes={andamentoNotes}
-                />
+              <div ref={contentRef} className="bg-white rounded-[2rem] p-8 shadow-inner min-h-full border border-slate-200/50">
+                {isGeneratingAI ? (
+                  <div className="flex flex-col items-center justify-center py-24 space-y-4">
+                    <div className="w-12 h-12 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Consultando Inteligência Estratégica...</p>
+                  </div>
+                ) : (
+                  <EntregavelFormatado
+                    tipo={entregavelTab === 0 ? 'plano' : entregavelTab === 1 ? 'relatorio' : 'hubspot'}
+                    parceiro={parceiro}
+                    rpiData={rpiData}
+                    acoes={allAcoes}
+                    leads={leads}
+                    discussionNotes={andamentoNotes}
+                    // Override with AI text if available
+                    customContent={
+                      entregavelTab === 0 ? generatedTexts.plano_acao :
+                      entregavelTab === 1 ? generatedTexts.relatorio :
+                      generatedTexts.hubspot
+                    }
+                  />
+                )}
               </div>
             </div>
 
             <div className="px-10 py-8 border-t border-slate-100 flex items-center justify-between gap-6">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                Pronto para copiar e enviar ao parceiro
-              </p>
-              <CopyButton
-                text={entregavelTab === 0 ? planoText : entregavelTab === 1 ? relatorioText : hubspotText}
-                label="Copiar Agora"
-              />
+              <div className="flex items-center gap-4">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  {import.meta.env.VITE_ANTHROPIC_API_KEY ? 'Gerado com IA ✦' : 'Gerado via Template'}
+                </p>
+                <button 
+                  onClick={() => handleGenerateAI(entregavelTab === 0 ? 'plano_acao' : entregavelTab === 1 ? 'relatorio' : 'hubspot')}
+                  disabled={isGeneratingAI}
+                  className="p-2 text-slate-300 hover:text-teal-500 transition-all rounded-lg hover:bg-teal-50"
+                  title="Regenerar"
+                >
+                  <Zap size={14} className={isGeneratingAI ? 'animate-pulse' : ''} />
+                </button>
+              </div>
+              <div className="flex gap-3">
+                {entregavelTab < 2 && (
+                  <button
+                    onClick={handleDownloadPDF}
+                    disabled={isExportingPDF || isGeneratingAI}
+                    className="flex items-center gap-2 px-6 py-3.5 bg-white border border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50"
+                  >
+                    <Download size={14} />
+                    {isExportingPDF ? 'Gerando...' : 'Baixar PDF'}
+                  </button>
+                )}
+                <CopyButton
+                  text={entregavelTab === 0 ? generatedTexts.plano_acao : entregavelTab === 1 ? generatedTexts.relatorio : generatedTexts.hubspot}
+                  label="Copiar Texto"
+                />
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

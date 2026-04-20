@@ -17,6 +17,7 @@ interface EntregavelProps {
   acoes: Array<Partial<Acao>>
   leads: Lead[]
   discussionNotes?: string
+  customContent?: string
 }
 
 const PRIORIDADE_STYLES: Record<string, string> = {
@@ -29,6 +30,47 @@ const RESPONSAVEL_STYLES: Record<string, string> = {
   Parceiro: 'bg-teal-50 text-teal-600 border border-teal-100',
   Gerente: 'bg-blue-50 text-blue-600 border border-blue-100',
   Ambos: 'bg-violet-50 text-violet-600 border border-violet-100',
+}
+
+function AIContent({ content, titulo, subtitulo, numeroRPI, dataRPI, icon: Icon }: { 
+  content: string; 
+  titulo: string; 
+  subtitulo: string;
+  numeroRPI: number;
+  dataRPI: string;
+  icon: any;
+}) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col min-h-[800px]">
+      <div className="bg-[#0F172A] p-10 text-white relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5">
+          <Icon size={140} />
+        </div>
+        <div className="relative z-10 space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-500/20 border border-teal-500/30 rounded-full">
+            <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-400">Inteligência Estratégica ✦</span>
+          </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter">{titulo}</h1>
+            <p className="text-slate-400 font-medium">{subtitulo}</p>
+          </div>
+          <div className="flex gap-6 pt-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+              <span className="text-teal-500">RPI #{numeroRPI}</span>
+              <span>•</span>
+              <span>{formatDate(dataRPI)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="p-10 prose prose-slate max-w-none">
+        <div className="text-slate-700 leading-relaxed whitespace-pre-wrap text-sm font-medium">
+          {content}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function PlanoFormatado({ parceiro, rpiData, acoes }: EntregavelProps) {
@@ -358,6 +400,19 @@ function HubSpotFormatado({ parceiro, rpiData, acoes, leads, discussionNotes }: 
 }
 
 export default function EntregavelFormatado(props: EntregavelProps) {
+  if (props.customContent) {
+    return (
+      <AIContent 
+        content={props.customContent}
+        titulo={props.parceiro.nome}
+        subtitulo={props.tipo === 'plano' ? 'Plano de Ação Personalizado' : props.tipo === 'relatorio' ? 'Status Report Estratégico' : 'HubSpot CRM Summary'}
+        numeroRPI={props.rpiData.numero_sequencial}
+        dataRPI={props.rpiData.data_reuniao}
+        icon={props.tipo === 'plano' ? ClipboardList : props.tipo === 'relatorio' ? TrendingUp : FileText}
+      />
+    )
+  }
+
   switch (props.tipo) {
     case 'plano':
       return <PlanoFormatado {...props} />

@@ -49,16 +49,17 @@ Webapp standalone para conduzir RPIs (Reuniões de Planejamento Individual) com 
 - [x] Integração de Playbooks no fluxo da RPI.
 - [x] Sistema de Playbooks Condicionais.
 
-### ✅ Sprint 3: Dashboard & UX Premium
-- [x] Overhaul visual (Glassmorphism).
-- [x] Dashboard unificado consumindo views do Supabase.
-- [x] Hooks `useDashboard` e `useSettings`.
-- [x] Performance Projections (1x1x1x1).
+### ✅ Sprint 3: Deliverables Polish & AI
+- [x] Replaced manual modal with Radix Dialog (Accessibility).
+- [x] Integrated Anthropic SDK for AI-assisted action plans.
+- [x] High-fidelity PDF Export (jsPDF + html2canvas).
+- [x] Premium Document Previews in CondutorRPI.
 
-### 🚀 Sprint 4: Próximos Passos
-- [ ] Comparação entre RPIs históricas.
-- [ ] Exportação em PDF do Relatório RPI.
-- [ ] Notificações Push para agendamentos.
+### 🚀 Sprint 4: Secondary App Improvements
+- [ ] Dashboard LocalStorage fallback & Real Performance Data.
+- [ ] Agenda optimization (Fix N+1 queries).
+- [ ] Functional Search Bar & Notifications Bell.
+- [ ] Performance Evolution Tab in Partner Profile.
 
 ---
 

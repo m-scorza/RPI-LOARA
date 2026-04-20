@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { RPI, Lead, FunilVendasSnapshot } from '../types/database'
+import type { Lead, FunilVendasSnapshot } from '../types/database'
 
 interface RPIStoreState {
   // Session Status
@@ -10,6 +10,7 @@ interface RPIStoreState {
   currentBlockId: string
   rpiId: string | null
   rpiNum: number | null
+  maxVisitedBlockIndex: number
 
   // Funnel Data
   funilRitmo: number
@@ -39,7 +40,7 @@ interface RPIStoreState {
   // Actions
   startSession: (pId: string, rpiId: string, rpiNum: number) => void
   updateData: (data: Partial<Omit<RPIStoreState, 'startSession' | 'completeSession' | 'updateData' | 'setCurrentBlock'>>) => void
-  setCurrentBlock: (id: string) => void
+  setCurrentBlock: (id: string, index: number) => void
   completeSession: () => void
 }
 
@@ -52,6 +53,7 @@ export const useRPIStore = create<RPIStoreState>()(
       currentBlockId: 'prep',
       rpiId: null,
       rpiNum: null,
+      maxVisitedBlockIndex: 0,
 
       funilRitmo: 1,
       funilSnapshot: null,
@@ -75,11 +77,15 @@ export const useRPIStore = create<RPIStoreState>()(
         rpiNum,
         startTime: Date.now(),
         currentBlockId: 'duvidas', // Move to first real block after start
+        maxVisitedBlockIndex: 1, // 'duvidas' is index 1
       }),
 
       updateData: (data) => set((state) => ({ ...state, ...data })),
 
-      setCurrentBlock: (id) => set({ currentBlockId: id }),
+      setCurrentBlock: (id, index) => set((state) => ({ 
+        currentBlockId: id,
+        maxVisitedBlockIndex: Math.max(state.maxVisitedBlockIndex, index)
+      })),
 
       completeSession: () => set({
         isRunning: false,
@@ -88,6 +94,7 @@ export const useRPIStore = create<RPIStoreState>()(
         currentBlockId: 'prep',
         rpiId: null,
         rpiNum: null,
+        maxVisitedBlockIndex: 0,
         funilRitmo: 1,
         funilSnapshot: null,
         duvidas: {},
