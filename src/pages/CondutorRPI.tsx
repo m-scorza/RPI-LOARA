@@ -529,6 +529,41 @@ export default function CondutorRPI() {
                 </div>
               )}
 
+              {/* Premium Deliverables Switcher */}
+              <div className="space-y-6">
+                <div className="flex justify-center p-1.5 bg-slate-100 rounded-2xl w-fit mx-auto">
+                  {(['plano', 'relatorio', 'hubspot'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setExportType(t)}
+                      className={`px-8 py-3 rounded-[1.25rem] text-[10px] font-black uppercase tracking-widest transition-all ${
+                        exportType === t 
+                          ? 'bg-white text-slate-900 shadow-xl shadow-slate-200 scale-105' 
+                          : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      {t === 'plano' ? 'Plano de Ação' : t === 'relatorio' ? 'Status Report' : 'HubSpot CRM'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="animate-fade-in-up">
+                  <EntregavelFormatado
+                    tipo={exportType}
+                    parceiro={parceiro}
+                    rpiData={{
+                      numero_sequencial: nextRpiNumber,
+                      data_reuniao: new Date().toISOString(),
+                      notas_gerais: andamentoNotes,
+                      proxima_rpi_prevista: proximaRpiDate
+                    }}
+                    acoes={[...previousAcoes.map(a => ({ ...a, status: previousAcoesStatus[a.id] || a.status })), ...newAcoes]}
+                    leads={leads}
+                    discussionNotes={andamentoNotes}
+                  />
+                </div>
+              </div>
+
               <div className="flex justify-center pt-6">
                 <button
                   onClick={startMeeting}
@@ -946,28 +981,46 @@ export default function CondutorRPI() {
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                   <Activity size={12} /> Ações Herdeiras
                 </h3>
-                <div className="grid grid-cols-1 gap-3">
-                  {previousAcoes.map((acao: Acao) => (
-                    <div key={acao.id} className="group flex items-center gap-4 bg-white border border-slate-100 rounded-2xl px-6 py-4 shadow-sm hover:shadow-md transition-all">
-                      <div className="flex-1">
-                        <p className="text-sm font-black text-slate-800 tracking-tight">{acao.descricao}</p>
-                        <p className="text-[10px] font-medium text-slate-400 mt-1 uppercase tracking-widest">
-                          {acao.responsavel} • {acao.prazo ? formatDate(acao.prazo) : 'Sem prazo'}
-                        </p>
-                      </div>
-                      <select
-                        value={previousAcoesStatus[acao.id] || acao.status}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPreviousAcoesStatus((prev: any) => ({ ...prev, [acao.id]: e.target.value }))}
-                        className="text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-100 px-3 py-2 bg-slate-50 text-slate-600 focus:outline-none focus:ring-4 focus:ring-teal-500/10 transition-all cursor-pointer"
-                      >
-                        <option value="concluida">Concluída</option>
-                        <option value="em_andamento">Em andamento</option>
-                        <option value="pendente">Pendente</option>
-                        <option value="cancelada">Cancelada</option>
-                      </select>
-                    </div>
-                  ))}
-                </div>
+                 <div className="grid grid-cols-1 gap-3">
+                   {previousAcoes.map((acao: Acao) => (
+                     <div key={acao.id} className="group flex items-center gap-6 bg-white border border-slate-100 rounded-[2rem] px-8 py-6 shadow-sm hover:shadow-xl transition-all hover:border-teal-500/20">
+                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                         previousAcoesStatus[acao.id] === 'concluida' ? 'bg-emerald-50 text-emerald-600' : 
+                         previousAcoesStatus[acao.id] === 'cancelada' ? 'bg-slate-50 text-slate-400' :
+                         'bg-amber-50 text-amber-600 animate-pulse'
+                       }`}>
+                         {previousAcoesStatus[acao.id] === 'concluida' ? <CheckCircle2 size={24} /> : <Clock size={24} />}
+                       </div>
+                       <div className="flex-1">
+                         <p className="text-base font-black text-slate-800 tracking-tight">{acao.descricao}</p>
+                         <div className="flex items-center gap-3 mt-2">
+                           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                             {acao.responsavel} • {acao.prazo ? formatDate(acao.prazo) : 'Sem prazo'}
+                           </span>
+                           {acao.prioridade && (
+                             <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                               acao.prioridade === 'alta' ? 'bg-rose-50 text-rose-500 border border-rose-100' :
+                               acao.prioridade === 'média' ? 'bg-amber-50 text-amber-500 border border-amber-100' :
+                               'bg-slate-50 text-slate-400 border border-slate-100'
+                             }`}>
+                               {acao.prioridade}
+                             </span>
+                           )}
+                         </div>
+                       </div>
+                       <select
+                         value={previousAcoesStatus[acao.id] || acao.status}
+                         onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateData({ previousAcoesStatus: { ...previousAcoesStatus, [acao.id]: e.target.value } })}
+                         className="text-[10px] font-black uppercase tracking-widest rounded-xl border border-slate-100 px-4 py-2.5 bg-slate-50 text-slate-600 focus:outline-none focus:ring-4 focus:ring-teal-500/10 transition-all cursor-pointer hover:bg-white"
+                       >
+                         <option value="concluida">Concluída</option>
+                         <option value="em_andamento">Em andamento</option>
+                         <option value="pendente">Pendente</option>
+                         <option value="cancelada">Cancelada</option>
+                       </select>
+                     </div>
+                   ))}
+                 </div>
               </div>
             )}
 
@@ -1095,26 +1148,32 @@ export default function CondutorRPI() {
                 </h3>
                 <div className="grid grid-cols-1 gap-3">
                   {newAcoes.map((a: any, i: number) => (
-                    <div key={i} className="flex items-center gap-4 bg-white border border-slate-100 rounded-2xl px-6 py-4 shadow-sm group">
-                      <div className="flex-1">
-                        <p className="text-sm font-black text-slate-800 tracking-tight">{a.descricao}</p>
-                        <div className="flex items-center gap-3 mt-1.5">
-                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-teal-50 text-teal-600 rounded-md">
-                            {a.responsavel}
-                          </span>
-                          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                            {a.prazo ? formatDate(a.prazo) : 'Sem prazo'}
-                          </span>
-                          <span className={`text-[9px] font-black uppercase tracking-widest ${
-                            a.prioridade === 'alta' ? 'text-rose-500' : 'text-slate-400'
-                          }`}>
-                            {a.prioridade}
-                          </span>
-                        </div>
+                    <div key={i} className="flex items-center gap-6 bg-white border border-teal-100 rounded-[2rem] px-8 py-6 shadow-sm group hover:border-teal-500 transition-all">
+                      <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center shrink-0">
+                        {a.categoria === 'indicação' ? <TrendingUp size={24} /> :
+                         a.categoria === 'documentação' ? <FileText size={24} /> :
+                         a.categoria === 'treinamento' ? <Zap size={24} /> :
+                         a.categoria === 'processo' ? <Layout size={24} /> :
+                         <Activity size={24} />}
                       </div>
-                      <button onClick={() => setNewAcoes((prev: any[]) => prev.filter((_: any, j: number) => j !== i))} className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
-                        <X size={18} />
-                      </button>
+                       <div className="flex-1">
+                         <p className="text-base font-black text-slate-800 tracking-tight">{a.descricao}</p>
+                         <div className="flex items-center gap-3 mt-2">
+                           <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                             a.prioridade === 'alta' ? 'bg-rose-50 text-rose-500 border border-rose-100' :
+                             a.prioridade === 'média' ? 'bg-amber-50 text-amber-500 border border-amber-100' :
+                             'bg-slate-50 text-slate-400 border border-slate-100'
+                           }`}>
+                             {a.prioridade}
+                           </span>
+                           <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                             {a.responsavel} • {a.prazo ? formatDate(a.prazo) : 'Sem prazo'}
+                           </span>
+                         </div>
+                       </div>
+                       <button onClick={() => updateData({ newAcoes: newAcoes.filter((_: any, j: number) => j !== i) })} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-2xl transition-all">
+                         <Trash2 size={20} />
+                       </button>
                     </div>
                   ))}
                 </div>

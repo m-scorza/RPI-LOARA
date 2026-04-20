@@ -3,6 +3,7 @@ import { Users, Phone, Handshake, TrendingUp, CheckCircle2, AlertCircle } from '
 import type { Parceiro, FunilVendasSnapshot } from '../types/database'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
 import { formatCurrency } from '../lib/format'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
 
 interface FunilVendasProps {
   parceiro: Parceiro
@@ -120,33 +121,98 @@ export default function FunilVendas({
         </p>
       </div>
 
-      {/* Cascade */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Cascata</p>
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Cascade Visual */}
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm space-y-6">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fluxo Operacional Mensal</p>
+          <div className="space-y-4">
+            <CascadeItem
+              icon={<Users size={18} />}
+              color="bg-teal-50 text-teal-600"
+              label="Prospecções"
+              value={funil.prospeccoesSemana * 4}
+              detail="Volume total de contatos/mês"
+            />
+            <div className="flex justify-center -my-2"><div className="w-0.5 h-6 bg-slate-100" /></div>
+            <CascadeItem
+              icon={<Phone size={18} />}
+              color="bg-blue-50 text-blue-600"
+              label="Reuniões"
+              value={funil.reunioesMes}
+              detail="Volume total de reuniões/mês"
+            />
+            <div className="flex justify-center -my-2"><div className="w-0.5 h-6 bg-slate-100" /></div>
+            <CascadeItem
+              icon={<Handshake size={18} />}
+              color="bg-violet-50 text-violet-600"
+              label="Fechamentos"
+              value={funil.clientesMes}
+              detail="Novos contratos/mês"
+            />
+          </div>
+        </div>
 
-        <div className="space-y-3">
-          <CascadeItem
-            icon={<Users size={18} />}
-            color="bg-teal-100 text-teal-700"
-            label="Cadastros/dia"
-            value={funil.cadastrosDia}
-            detail={`= ${funil.prospeccoesSemana} prospecções/semana = ~${funil.contatosMes} contatos/mês`}
-          />
-          <div className="flex justify-center"><div className="w-0.5 h-4 bg-slate-200" /></div>
-          <CascadeItem
-            icon={<Phone size={18} />}
-            color="bg-blue-100 text-blue-700"
-            label="Reuniões qualificadas/semana"
-            value={funil.reunioesSemana}
-            detail={`= ${funil.reunioesMes} reuniões/mês`}
-          />
-          <div className="flex justify-center"><div className="w-0.5 h-4 bg-slate-200" /></div>
-          <CascadeItem
-            icon={<Handshake size={18} />}
-            color="bg-violet-100 text-violet-700"
-            label="Clientes novos/mês"
-            value={funil.clientesMes}
-          />
+        {/* Projection Chart */}
+        <div className="bg-slate-900 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden flex flex-col">
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <TrendingUp size={80} className="text-white" />
+          </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-6">Projeção de Performance (R$)</p>
+          
+          <div className="flex-1 min-h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={[
+                  { name: 'Ponderado', valor: funil.creditoTotal * comissaoLiquida },
+                  { name: 'Meta', valor: proj.metaReceitaMensal }
+                ]}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+              >
+                <XAxis 
+                  dataKey="name" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fill: '#64748b', fontSize: 10, fontWeight: 800 }} 
+                />
+                <Tooltip 
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-slate-800 border border-slate-700 px-4 py-3 rounded-2xl shadow-2xl">
+                          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">{payload[0].payload.name}</p>
+                          <p className="text-sm font-black text-white">{formatCurrency(Number(payload[0].value))}</p>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Bar dataKey="valor" radius={[12, 12, 12, 12]} barSize={40}>
+                  <Cell fill="#2DD4BF" />
+                  <Cell fill="#1E293B" stroke="#334155" strokeWidth={2} />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="mt-6 pt-6 border-t border-white/5">
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-[9px] font-black text-teal-400 uppercase tracking-widest mb-1">Gap para Meta</p>
+                <p className="text-2xl font-black text-white tracking-tighter">
+                  {atingeMeta ? 'Meta Atingida' : formatCurrency(proj.metaReceitaMensal - funil.comissaoTotal)}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Atingimento</p>
+                <p className={`text-sm font-black ${atingeMeta ? 'text-teal-400' : 'text-rose-400'}`}>
+                  {Math.round((funil.comissaoTotal / proj.metaReceitaMensal) * 100)}%
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -2,6 +2,8 @@ import type { Parceiro, Acao, Lead } from '../types/database'
 import { formatCurrency, formatDate, GERENTE_NOME } from '../lib/format'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
 import { ETAPAS_FUNIL } from '../types/database'
+import { Check, Clock, TrendingUp, Users, Target, FileText, ClipboardList, Layout, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface EntregavelProps {
   tipo: 'plano' | 'relatorio' | 'hubspot'
@@ -18,84 +20,143 @@ interface EntregavelProps {
 }
 
 const PRIORIDADE_STYLES: Record<string, string> = {
-  alta: 'bg-rose-100 text-rose-700',
-  média: 'bg-amber-100 text-amber-700',
-  baixa: 'bg-slate-100 text-slate-600',
+  alta: 'bg-rose-50 text-rose-600 border border-rose-100 ring-4 ring-rose-500/5',
+  média: 'bg-amber-50 text-amber-600 border border-amber-100 ring-4 ring-amber-500/5',
+  baixa: 'bg-slate-50 text-slate-500 border border-slate-100 ring-4 ring-slate-500/5',
 }
 
 const RESPONSAVEL_STYLES: Record<string, string> = {
-  Parceiro: 'bg-teal-100 text-teal-700',
-  Gerente: 'bg-blue-100 text-blue-700',
-  Ambos: 'bg-violet-100 text-violet-700',
+  Parceiro: 'bg-teal-50 text-teal-600 border border-teal-100',
+  Gerente: 'bg-blue-50 text-blue-600 border border-blue-100',
+  Ambos: 'bg-violet-50 text-violet-600 border border-violet-100',
 }
 
 function PlanoFormatado({ parceiro, rpiData, acoes }: EntregavelProps) {
   const proj = calculateRevenueProjection(parceiro)
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-teal-600 to-teal-700 rounded-xl p-5 text-white">
-        <p className="text-xs font-semibold uppercase tracking-wider opacity-80">LOARA — Plano de Ação</p>
-        <p className="text-lg font-bold mt-1">{parceiro.nome} ({parceiro.categoria})</p>
-        <div className="flex gap-4 mt-2 text-sm opacity-90">
-          <span>RPI #{rpiData.numero_sequencial}</span>
-          <span>{formatDate(rpiData.data_reuniao)}</span>
-          <span>Gerente: {GERENTE_NOME}</span>
+    <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col min-h-[800px]">
+      {/* Premium Header */}
+      <div className="bg-[#0F172A] p-10 text-white relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5">
+          <ClipboardList size={140} />
+        </div>
+        <div className="relative z-10 space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-teal-500/20 border border-teal-500/30 rounded-full">
+            <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-teal-400">Plano de Ação Estratégico</span>
+          </div>
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter">{parceiro.nome}</h1>
+            <p className="text-slate-400 font-medium">Categoria {parceiro.categoria} — {parceiro.regiao || 'Brasil'}</p>
+          </div>
+          <div className="flex gap-6 pt-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+              <span className="text-teal-500">#{rpiData.numero_sequencial}</span>
+              <span>•</span>
+              <span>{formatDate(rpiData.data_reuniao)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+              <Users size={14} className="text-teal-500/50" />
+              <span>Gerente: {GERENTE_NOME}</span>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Revenue context */}
-      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-        <p className="text-sm text-slate-700">
-          Meta: <strong className="text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}/mês</strong> em receita
-          — {proj.leadsNecessariosMensal} leads/mês, {proj.clientesNecessariosMensal} clientes/mês
-        </p>
-      </div>
-
-      {/* Actions table */}
-      <div>
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Ações Definidas</h3>
-        {acoes.length === 0 ? (
-          <p className="text-sm text-slate-400 italic">Nenhuma ação definida.</p>
-        ) : (
-          <div className="space-y-2">
-            {acoes.map((a, i) => (
-              <div key={i} className="bg-white rounded-lg border border-slate-200 p-3 flex items-start gap-3">
-                <span className="text-xs font-bold text-slate-400 mt-0.5">{i + 1}</span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-800">{a.descricao}</p>
-                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    {a.responsavel && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RESPONSAVEL_STYLES[a.responsavel] || 'bg-slate-100 text-slate-600'}`}>
-                        {a.responsavel}
-                      </span>
-                    )}
-                    {a.prioridade && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${PRIORIDADE_STYLES[a.prioridade] || 'bg-slate-100 text-slate-600'}`}>
-                        {a.prioridade}
-                      </span>
-                    )}
-                    {a.prazo && (
-                      <span className="text-xs text-slate-500">Prazo: {formatDate(a.prazo)}</span>
-                    )}
-                    {a.categoria && (
-                      <span className="text-xs text-slate-400">{a.categoria}</span>
-                    )}
-                  </div>
+      <div className="p-10 space-y-12">
+        {/* Revenue Bridge */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="bg-emerald-50/50 border border-emerald-100 rounded-[2rem] p-8 relative group">
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+              <TrendingUp size={40} className="text-emerald-600" />
+            </div>
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4">Objetivo de Receita</p>
+            <div className="space-y-4">
+              <div>
+                <p className="text-3xl font-black text-slate-800 tracking-tight">{formatCurrency(proj.metaReceitaMensal)}/mês</p>
+                <div className="h-1.5 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                  <div className="h-full bg-teal-500 w-3/4" />
                 </div>
               </div>
-            ))}
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Este plano foi construído para viabilizar o faturamento anual de <span className="text-slate-800 font-black">{formatCurrency(proj.metaReceitaAnual)}</span>.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-8">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Ritmo Operacional</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xl font-black text-slate-800">{proj.leadsNecessariosMensal}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Leads / Mês</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xl font-black text-slate-800">{proj.clientesNecessariosMensal}</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contratos / Mês</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions Section */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+              <Check size={18} />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 tracking-tight">Compromissos e Ações</h3>
+          </div>
+          
+          <div className="space-y-4">
+            {acoes.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+                <p className="text-slate-400 font-medium">Nenhuma ação prioritária definida para este ciclo.</p>
+              </div>
+            ) : (
+              acoes.map((a, i) => (
+                <div key={i} className="group bg-white border border-slate-100 hover:border-teal-500/30 rounded-3xl p-6 transition-all hover:shadow-xl hover:shadow-teal-500/5 flex items-start gap-6">
+                  <div className="w-12 h-12 bg-slate-50 group-hover:bg-teal-50 rounded-2xl flex items-center justify-center text-slate-300 group-hover:text-teal-500 transition-colors shrink-0">
+                    <span className="text-sm font-black">{String(i + 1).padStart(2, '0')}</span>
+                  </div>
+                  <div className="flex-1 space-y-4">
+                    <p className="text-base font-bold text-slate-800 leading-tight">{a.descricao}</p>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${PRIORIDADE_STYLES[a.prioridade || 'baixa']}`}>
+                        {a.prioridade}
+                      </span>
+                      <span className={`text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg ${RESPONSAVEL_STYLES[a.responsavel || 'Parceiro']}`}>
+                        {a.responsavel}
+                      </span>
+                      {a.prazo && (
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1 rounded-lg">
+                          <Clock size={12} />
+                          {formatDate(a.prazo)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        {rpiData.proxima_rpi_prevista && (
+          <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-slate-400">
+              <FileText size={16} />
+              <span className="text-xs font-medium">Documento gerado automaticamente pelo Sistema RPI-LOARA</span>
+            </div>
+            <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Próxima RPI</span>
+              <span className="text-sm font-black">{formatDate(rpiData.proxima_rpi_prevista)}</span>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Footer */}
-      {rpiData.proxima_rpi_prevista && (
-        <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-600">
-          Próxima RPI: <strong>{formatDate(rpiData.proxima_rpi_prevista)}</strong>
-        </div>
-      )}
     </div>
   )
 }
@@ -107,103 +168,134 @@ function RelatorioFormatado({ parceiro, rpiData, leads, acoes }: EntregavelProps
   const ponderado = activeLeads.reduce((s, l) => s + (l.demanda || 0) * l.probabilidade, 0)
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-5 text-white">
-        <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Relatório de Status</p>
-        <p className="text-lg font-bold mt-1">{parceiro.nome}</p>
-        <div className="flex gap-4 mt-2 text-sm opacity-90">
-          <span>RPI #{rpiData.numero_sequencial}</span>
-          <span>{formatDate(rpiData.data_reuniao)}</span>
-          <span>{parceiro.categoria} {parceiro.regiao ? `• ${parceiro.regiao}` : ''}</span>
+    <div className="bg-white border border-slate-200 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col min-h-[800px]">
+      <div className="bg-blue-900 p-10 text-white relative">
+        <div className="absolute top-0 right-0 p-10 opacity-5">
+          <TrendingUp size={140} />
         </div>
-      </div>
-
-      {/* Revenue goal */}
-      <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-        <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Sua Meta</p>
-        <p className="text-sm text-slate-700">
-          <strong className="text-emerald-700">{formatCurrency(proj.metaReceitaMensal)}/mês</strong> em receita
-          ({formatCurrency(proj.metaReceitaAnual)}/ano)
-        </p>
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <div className="bg-white rounded-lg p-2 text-center">
-            <p className="text-lg font-bold text-slate-800">{formatCurrency(proj.creditoNecessarioMensal)}</p>
-            <p className="text-xs text-slate-500">crédito/mês</p>
+        <div className="relative z-10 space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/20 rounded-full">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100">Relatório de Status de Performance</span>
           </div>
-          <div className="bg-white rounded-lg p-2 text-center">
-            <p className="text-lg font-bold text-slate-800">{proj.clientesNecessariosMensal}</p>
-            <p className="text-xs text-slate-500">clientes/mês</p>
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter">{parceiro.nome}</h1>
+            <p className="text-blue-200 font-medium">{parceiro.categoria} • {parceiro.regiao || 'Brasil'}</p>
           </div>
-          <div className="bg-white rounded-lg p-2 text-center">
-            <p className="text-lg font-bold text-slate-800">{proj.leadsNecessariosMensal}</p>
-            <p className="text-xs text-slate-500">leads/mês</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Pipeline */}
-      <div>
-        <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Pipeline Atual</h3>
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          {ETAPAS_FUNIL.map((etapa) => {
-            const count = activeLeads.filter((l) => l.etapa === etapa).length
-            const valor = activeLeads.filter((l) => l.etapa === etapa).reduce((s, l) => s + (l.demanda || 0), 0)
-            if (count === 0) return null
-            return (
-              <div key={etapa} className="flex items-center justify-between px-4 py-2.5 border-b border-slate-50 last:border-b-0">
-                <span className="text-sm text-slate-700">{etapa}</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium text-slate-800">{count} leads</span>
-                  <span className="text-sm text-slate-500">{formatCurrency(valor)}</span>
-                </div>
-              </div>
-            )
-          })}
-          <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 font-medium">
-            <span className="text-sm text-slate-700">Total</span>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-800">{activeLeads.length} ativos</span>
-              <span className="text-sm text-slate-800">{formatCurrency(totalPipeline)}</span>
-              <span className="text-xs text-slate-500">({formatCurrency(ponderado)} pond.)</span>
+          <div className="flex gap-6 pt-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+              <span className="text-blue-400">RPI #{rpiData.numero_sequencial}</span>
+              <span>•</span>
+              <span>{formatDate(rpiData.data_reuniao)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+              <Users size={14} className="text-blue-400/50" />
+              <span>Gerente: {GERENTE_NOME}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Actions */}
-      {acoes.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Ações</h3>
-          <div className="space-y-1.5">
-            {acoes.map((a, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                <span className="text-slate-400 font-mono text-xs">{i + 1}.</span>
-                <span className="text-slate-700">{a.descricao}</span>
-                {a.responsavel && (
-                  <span className={`text-xs px-1.5 py-0.5 rounded ${RESPONSAVEL_STYLES[a.responsavel] || ''}`}>
-                    {a.responsavel}
-                  </span>
-                )}
-              </div>
-            ))}
+      <div className="p-10 space-y-12">
+        <div className="grid grid-cols-3 gap-6">
+          <div className="bg-blue-50 border border-blue-100 p-6 rounded-3xl">
+            <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 text-center">Total Pipeline</p>
+            <p className="text-xl font-black text-slate-800 text-center">{formatCurrency(totalPipeline)}</p>
+          </div>
+          <div className="bg-teal-50 border border-teal-100 p-6 rounded-3xl">
+            <p className="text-[9px] font-black text-teal-600 uppercase tracking-widest mb-1 text-center">Ponderado</p>
+            <p className="text-xl font-black text-slate-800 text-center">{formatCurrency(ponderado)}</p>
+          </div>
+          <div className="bg-slate-50 border border-slate-100 p-6 rounded-3xl">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 text-center">Leads Ativos</p>
+            <p className="text-xl font-black text-slate-800 text-center">{activeLeads.length}</p>
           </div>
         </div>
-      )}
 
-      {/* Notes */}
-      {rpiData.notas_gerais && (
-        <div>
-          <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Notas</h3>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap">{rpiData.notas_gerais}</p>
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Target size={18} />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 tracking-tight">Caminho para a Meta</h3>
+          </div>
+          
+          <div className="bg-slate-50 rounded-[2rem] p-8 border border-slate-100 space-y-8">
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-3xl font-black text-slate-800 tracking-tight">{formatCurrency(proj.metaReceitaMensal)}/mês</p>
+                <p className="text-xs text-slate-500 font-medium">Faturamento Alvo em Comissões</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-black text-teal-600">{Math.round((ponderado * proj.comissaoLiquida / (proj.metaReceitaMensal || 1)) * 100)}%</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Atingimento Estimado</p>
+              </div>
+            </div>
+            <div className="h-3 bg-white rounded-full overflow-hidden border border-slate-200">
+              <div 
+                className="h-full bg-gradient-to-r from-blue-500 to-teal-400" 
+                style={{ width: `${Math.min(100, (ponderado * proj.comissaoLiquida / (proj.metaReceitaMensal || 1)) * 100)}%` }} 
+              />
+            </div>
+          </div>
         </div>
-      )}
 
-      {rpiData.proxima_rpi_prevista && (
-        <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-600">
-          Próxima RPI: <strong>{formatDate(rpiData.proxima_rpi_prevista)}</strong>
+        <div className="space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <Layout size={18} />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 tracking-tight">Sumário do Funil</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {ETAPAS_FUNIL.map((etapa) => {
+              const etapaLeads = activeLeads.filter((l) => l.etapa === etapa)
+              const count = etapaLeads.length
+              const valor = etapaLeads.reduce((s, l) => s + (l.demanda || 0), 0)
+              if (count === 0) return null
+              return (
+                <div key={etapa} className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-2xl hover:border-blue-500/20 transition-all shadow-sm">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{etapa}</p>
+                    <p className="text-sm font-black text-slate-800">{count} {count === 1 ? 'Lead' : 'Leads'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-blue-600">{formatCurrency(valor)}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
-      )}
+
+        {rpiData.notas_gerais && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <FileText size={18} />
+              </div>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">Observações Estratégicas</h3>
+            </div>
+            <div className="p-8 bg-slate-900 rounded-[2rem] text-slate-300 text-sm leading-relaxed whitespace-pre-wrap font-medium">
+              {rpiData.notas_gerais}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-8 pt-8 border-t border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-slate-400">
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+            <span className="text-xs font-medium">Gerado em {new Date().toLocaleDateString()} pelo RPI-LOARA</span>
+          </div>
+          {rpiData.proxima_rpi_prevista && (
+            <div className="bg-slate-900 text-white px-6 py-3 rounded-2xl">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-3">Próxima RPI</span>
+              <span className="text-sm font-black">{formatDate(rpiData.proxima_rpi_prevista)}</span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -240,10 +332,28 @@ function HubSpotFormatado({ parceiro, rpiData, acoes, leads, discussionNotes }: 
     lines.push(`Próxima RPI: ${formatDate(rpiData.proxima_rpi_prevista)}`)
   }
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(lines.join('\n'))
+    toast.success('Copiado para o HubSpot!')
+  }
+
   return (
-    <pre className="whitespace-pre-wrap text-sm text-slate-700 font-mono bg-slate-50 rounded-xl p-4 leading-relaxed">
-      {lines.join('\n')}
-    </pre>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-6">
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Texto Formatado para o CRM</p>
+        <button 
+          onClick={copyToClipboard}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+        >
+          <Copy size={14} /> Copiar Texto
+        </button>
+      </div>
+      <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-8">
+        <pre className="whitespace-pre-wrap text-sm text-slate-700 font-mono leading-relaxed">
+          {lines.join('\n')}
+        </pre>
+      </div>
+    </div>
   )
 }
 
