@@ -47,7 +47,7 @@ function calcularFunil(ritmo: number, tiqueteMedio: number, comissaoLiquida: num
   }
 }
 
-const RITMOS = [2, 3, 4, 5, 6]
+const RITMOS = [1, 2, 3, 4, 5, 6]
 
 export default function FunilVendas({
   parceiro,
@@ -87,7 +87,14 @@ export default function FunilVendas({
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-slate-800">Funil de Vendas — Modelo de Ritmo</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-800">Funil de Vendas — Modelo de Ritmo</h2>
+        {ritmo === 1 && (
+          <div className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-200">
+            Padrão Ouro: 1x1x1x1
+          </div>
+        )}
+      </div>
 
       {/* Ritmo selector */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -102,7 +109,7 @@ export default function FunilVendas({
                 ritmo === r
                   ? 'bg-violet-500 text-white shadow-lg scale-105'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              } ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
+              } ${readOnly ? 'cursor-default' : 'cursor-pointer'} ${r === 1 ? 'ring-2 ring-amber-400' : ''}`}
             >
               {r}
             </button>

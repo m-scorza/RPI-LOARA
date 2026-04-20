@@ -110,6 +110,7 @@ export const LEAD_DEFAULTS: Partial<Lead> = {
   status: 'Ativo',
   origem: 'Indicação Parceiro',
   data_lead: today(),
+  dentro_farege: true,
 }
 
 export const RPI_DEFAULTS: Partial<RPI> = {

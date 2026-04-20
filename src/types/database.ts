@@ -89,6 +89,7 @@ export interface Lead {
   motivo_perda: string | null
   origem: OrigemLead
   observacoes: string | null
+  dentro_farege: boolean
   created_at: string
   updated_at: string
 }
