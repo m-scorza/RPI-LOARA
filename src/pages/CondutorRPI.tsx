@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus, ChevronRight, HelpCircle, BookOpen, Activity, Target, Zap, Layout as LayoutIcon, ClipboardList, Flag, Users, ShieldCheck, TrendingUp, AlertCircle } from 'lucide-react'
+import { useRPIStore } from '../stores/rpiStore'
 import { toast } from 'sonner'
 import { useParceiros } from '../hooks/useParceiros'
 import { useLeads } from '../hooks/useLeads'
@@ -113,35 +114,38 @@ export default function CondutorRPI() {
   const { id: parceiroId } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
+  const { 
+    isRunning, 
+    parceiroId: storeParceiroId, 
+    startTime, 
+    currentBlockId, 
+    rpiId, 
+    rpiNum,
+    funilRitmo,
+    funilSnapshot,
+    duvidas,
+    duvidasOutras,
+    andamentoNotes,
+    indicacoesCompromisso,
+    newLeads,
+    previousAcoesStatus,
+    newAcoes,
+    notasGerais,
+    proximaRPI,
+    startSession,
+    updateData,
+    setCurrentBlock,
+    completeSession
+  } = useRPIStore()
+
   const [parceiro, setParceiro] = useState<Parceiro | null>(null)
-  const [currentBlockId, setCurrentBlockId] = useState('prep')
-  const [startTime, setStartTime] = useState<number | null>(null)
-  const [rpiId, setRpiId] = useState<string | null>(null)
-  const [rpiNum, setRpiNum] = useState<number | null>(null)
-
-  // Funil de vendas state
-  const [funilRitmo, setFunilRitmo] = useState(1)
-  const [funilSnapshot, setFunilSnapshot] = useState<FunilVendasSnapshot | null>(null)
-
-  // Block data
-  const [duvidas, setDuvidas] = useState<Record<string, { checked: boolean; notes: string; resolved: boolean }>>({})
-  const [duvidasOutras, setDuvidasOutras] = useState('')
-  const [andamentoNotes, setAndamentoNotes] = useState('')
-  const [indicacoesCompromisso, setIndicacoesCompromisso] = useState('')
-  const [newLeads, setNewLeads] = useState<Lead[]>([])
   const [newLeadForm, setNewLeadForm] = useState({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
 
-  // Action plan
+  // Action plan local state (UI only)
   const [previousAcoes, setPreviousAcoes] = useState<Acao[]>([])
-  const [previousAcoesStatus, setPreviousAcoesStatus] = useState<Record<string, string>>({})
-  const [newAcoes, setNewAcoes] = useState<Array<{
-    descricao: string; responsavel: Responsavel; prazo: string; prioridade: Prioridade; categoria: CategoriaAcao
-  }>>([])
   const [acaoForm, setAcaoForm] = useState({ descricao: '', responsavel: 'Parceiro' as Responsavel, prazo: '', prioridade: 'média' as Prioridade, categoria: 'outro' as CategoriaAcao })
 
-  // Finalization
-  const [notasGerais, setNotasGerais] = useState('')
-  const [proximaRPI, setProximaRPI] = useState('')
+  // UI state
   const [showEntregaveis, setShowEntregaveis] = useState(false)
   const [entregavelTab, setEntregavelTab] = useState(0)
   const [finalizing, setFinalizing] = useState(false)
@@ -166,13 +170,26 @@ export default function CondutorRPI() {
   const canGoBack = blockIndex > 0
   const canGoForward = blockIndex < blocks.length - 1
 
-  const goBack = () => { if (canGoBack) setCurrentBlockId(blocks[blockIndex - 1].id) }
-  const goForward = () => { if (canGoForward) setCurrentBlockId(blocks[blockIndex + 1].id) }
+  const goBack = () => { if (canGoBack) setCurrentBlock(blocks[blockIndex - 1].id) }
+  const goForward = () => { if (canGoForward) setCurrentBlock(blocks[blockIndex + 1].id) }
 
   const handleFunilRitmoChange = useCallback((ritmo: number, snapshot: FunilVendasSnapshot) => {
-    setFunilRitmo(ritmo)
-    setFunilSnapshot(snapshot)
-  }, [])
+    updateData({ funilRitmo: ritmo, funilSnapshot: snapshot })
+  }, [updateData])
+
+  // S1: Cross-partner session recovery logic
+  useEffect(() => {
+    if (isRunning && storeParceiroId && storeParceiroId !== parceiroId) {
+      toast.warning('Uma sessão para outro parceiro está em execução. Finalize ou descarte-a primeiro.', {
+        action: {
+          label: 'Descartar Anterior',
+          onClick: () => completeSession()
+        },
+        duration: 8000
+      })
+      navigate(`/parceiros/${storeParceiroId}/rpi/nova`)
+    }
+  }, [isRunning, storeParceiroId, parceiroId, navigate, completeSession])
 
   // Load parceiro data
   useEffect(() => {
@@ -189,7 +206,7 @@ export default function CondutorRPI() {
       setPreviousAcoes(acoes)
       const statuses: Record<string, string> = {}
       acoes.forEach((a: Acao) => { statuses[a.id] = a.status })
-      setPreviousAcoesStatus(statuses)
+      updateData({ previousAcoesStatus: statuses })
     })
   }, [parceiroId, getPendingAcoes])
 
@@ -198,24 +215,24 @@ export default function CondutorRPI() {
     if (!proximaRPI) {
       const d = new Date()
       d.setDate(d.getDate() + 45)
-      setProximaRPI(d.toISOString().split('T')[0])
+      updateData({ proximaRPI: d.toISOString().split('T')[0] })
     }
   }, [proximaRPI])
 
-  // Auto-save every 30s
-  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  useEffect(() => {
-    if (!rpiId) return
-    autoSaveRef.current = setInterval(() => {
-      updateRPI(rpiId, {
-        bloco_duvidas: duvidas as unknown as Record<string, unknown>,
-        bloco_andamento: { notes: andamentoNotes } as unknown as Record<string, unknown>,
-        bloco_indicacoes: { compromisso: indicacoesCompromisso, newLeads } as unknown as Record<string, unknown>,
-        notas_gerais: notasGerais,
-      })
-    }, 30000)
-    return () => { if (autoSaveRef.current) clearInterval(autoSaveRef.current) }
-  }, [rpiId, duvidas, andamentoNotes, indicacoesCompromisso, newLeads, notasGerais, updateRPI])
+   // Auto-save every 30s
+   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null)
+   useEffect(() => {
+     if (!isRunning || !rpiId) return
+     autoSaveRef.current = setInterval(() => {
+       updateRPI(rpiId, {
+         bloco_duvidas: duvidas as unknown as Record<string, unknown>,
+         bloco_andamento: { notes: andamentoNotes } as unknown as Record<string, unknown>,
+         bloco_indicacoes: { compromisso: indicacoesCompromisso, newLeads } as unknown as Record<string, unknown>,
+         notas_gerais: notasGerais,
+       })
+     }, 30000)
+     return () => { if (autoSaveRef.current) clearInterval(autoSaveRef.current) }
+   }, [isRunning, rpiId, duvidas, andamentoNotes, indicacoesCompromisso, newLeads, notasGerais, updateRPI])
 
   const startMeeting = async () => {
     if (parceiro?.categoria === 'Bronze') {
@@ -236,10 +253,8 @@ export default function CondutorRPI() {
         return
       }
 
-      setRpiId(rpi.id)
-      setRpiNum(rpi.numero_sequencial)
-      setStartTime(Date.now())
-      setCurrentBlockId('duvidas')
+      // S1: Initialize session in store
+      startSession(parceiroId!, rpi.id, rpi.numero_sequencial)
     } catch (error) {
       console.error('Error starting meeting:', error)
       toast.error('Ocorreu um erro ao iniciar a sessão.')
@@ -263,7 +278,7 @@ export default function CondutorRPI() {
         return
       }
 
-      setNewLeads((prev) => [...prev, result])
+      updateData({ newLeads: [...newLeads, result] })
       setNewLeadForm({ nome_empresa: '', cnpj: '', demanda: '', dentro_farege: true })
       toast.success('Lead adicionado ao pipeline!')
     } catch (error) {
@@ -275,7 +290,7 @@ export default function CondutorRPI() {
   // Add new acao
   const addNewAcao = () => {
     if (!acaoForm.descricao.trim()) return
-    setNewAcoes((prev: Partial<Acao>[]) => [...prev, { ...acaoForm, prazo: acaoForm.prazo || proximaRPI }])
+    updateData({ newAcoes: [...newAcoes, { ...acaoForm, prazo: acaoForm.prazo || proximaRPI }] })
     setAcaoForm({ descricao: '', responsavel: 'Parceiro', prazo: '', prioridade: 'média', categoria: 'outro' })
   }
 
@@ -306,13 +321,13 @@ export default function CondutorRPI() {
     const totalDemanda = activeLeads.reduce((s: number, l: Lead) => s + (l.demanda || 0), 0)
     const duration = startTime ? Math.floor((Date.now() - startTime) / 60000) : null
 
-    // Collect used playbook slugs
+    // Collect used playbook slugs from store
     const playbooksUsados = DUVIDAS_CHECKLIST
       .filter((t: any) => duvidas[t.id]?.checked && t.playbook)
       .map((t: any) => t.playbook!)
 
     try {
-      // Update RPI
+      // Update RPI in DB
       await updateRPI(rpiId, {
         status: 'finalizada',
         duracao_minutos: duration,
@@ -337,10 +352,10 @@ export default function CondutorRPI() {
         rpi_id: rpiId,
         parceiro_id: parceiroId!,
         descricao: acao.descricao,
-        responsavel: acao.responsavel,
+        responsavel: acao.responsavel as any,
         prazo: acao.prazo || null,
-        prioridade: acao.prioridade,
-        categoria: acao.categoria,
+        prioridade: acao.prioridade as any,
+        categoria: acao.categoria as any,
       }))
 
       // Update status of previous acoes
@@ -362,6 +377,8 @@ export default function CondutorRPI() {
         toast.warning('Algumas ações não foram salvas. Verifique e tente novamente.')
       } else {
         toast.success('RPI finalizada com sucesso!')
+        // S1: Complete session (clear store)
+        completeSession()
       }
       
       setFinalizing(false)
@@ -401,9 +418,9 @@ export default function CondutorRPI() {
                 {blocks.map((b: Block, i: number) => (
                   <button
                     key={b.id}
-                    onClick={() => { if (startTime || b.id === 'prep') setCurrentBlockId(b.id) }}
+                    onClick={() => { if (startTime || b.id === 'prep') setCurrentBlock(b.id) }}
                     className={`relative flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                      currentBlock.id === b.id
+                      currentBlockId === b.id
                         ? 'bg-[#0F172A] text-white shadow-md'
                         : blockIndex > i
                         ? 'text-teal-600 hover:bg-teal-50'
@@ -411,9 +428,9 @@ export default function CondutorRPI() {
                     }`}
                   >
                   {blockIndex > i && <div className="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 text-white rounded-full flex items-center justify-center border-2 border-white"><Check size={8} /></div>}
-                  {b.playbook && <BookOpen size={12} className={currentBlock.id === b.id ? 'text-violet-400' : 'text-violet-500'} />}
+                  {b.playbook && <BookOpen size={12} className={currentBlockId === b.id ? 'text-violet-400' : 'text-violet-500'} />}
                   <span className="hidden xl:inline">{b.label}</span>
-                  {currentBlock.id === b.id && <span className="xl:hidden">{b.label}</span>}
+                  {currentBlockId === b.id && <span className="xl:hidden">{b.label}</span>}
                 </button>
               ))}
             </div>
@@ -433,9 +450,28 @@ export default function CondutorRPI() {
           return (
             <div className="space-y-10 max-w-4xl mx-auto">
               <div className="space-y-2 text-center">
-                <h3 className="text-3xl font-black text-slate-800 tracking-tight">Preparação Estratégica</h3>
-                <div className="flex items-center justify-center gap-4">
                    <p className="text-slate-500 font-medium tracking-tight">Revise as metas e o histórico antes de iniciar a sessão com {parceiro.nome}.</p>
+                </div>
+
+                {isRunning && storeParceiroId === parceiroId && (
+                  <div className="bg-teal-500/10 border border-teal-500/20 p-6 rounded-[2rem] flex items-center justify-between gap-6 animate-pulse shadow-sm">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-teal-500 rounded-2xl text-white">
+                        <Zap size={20} fill="currentColor" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-800">Sessão em Andamento</p>
+                        <p className="text-xs text-slate-500 font-medium">Detectamos uma sessão ativa iniciada em {new Date(startTime!).toLocaleTimeString()}.</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setCurrentBlock('duvidas')}
+                      className="px-6 py-2.5 bg-[#0F172A] text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all shadow-md"
+                    >
+                      Retomar Sessão
+                    </button>
+                  </div>
+                )}
                    {funilRitmo >= 1 && (
                      <div className="bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full flex items-center gap-2">
                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -531,10 +567,12 @@ export default function CondutorRPI() {
                         <input
                           type="checkbox"
                           checked={d.checked}
-                          onChange={() => setDuvidas((prev: any) => ({
-                            ...prev,
-                            [item.id]: { ...d, checked: !d.checked },
-                          }))}
+                          onChange={() => updateData({
+                            duvidas: {
+                              ...duvidas,
+                              [item.id]: { ...d, checked: !d.checked }
+                            }
+                          })}
                           className="sr-only"
                         />
                         <div className={`w-6 h-6 rounded-xl border-2 flex items-center justify-center transition-all ${
@@ -555,18 +593,20 @@ export default function CondutorRPI() {
                         
                         {d.checked && (
                           <div className="mt-4 space-y-4 animate-fade-in">
-                            <textarea
-                              placeholder="Notas sobre a dificuldade e resolução..."
-                              value={d.notes}
-                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDuvidas((prev: any) => ({ ...prev, [item.id]: { ...d, notes: e.target.value } }))}
-                              rows={2}
-                              className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all"
-                            />
-                            <button
-                              onClick={(e: React.MouseEvent) => {
-                                e.preventDefault();
-                                setDuvidas((prev: any) => ({ ...prev, [item.id]: { ...d, resolved: !d.resolved } }))
-                              }}
+                             <textarea
+                               placeholder="Notas sobre a dificuldade e resolução..."
+                               value={d.notes}
+                               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateData({ 
+                                 duvidas: { ...duvidas, [item.id]: { ...d, notes: e.target.value } } 
+                               })}
+                               rows={2}
+                               className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-100 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all"
+                             />
+                             <button
+                               onClick={(e: React.MouseEvent) => {
+                                 e.preventDefault();
+                                 updateData({ duvidas: { ...duvidas, [item.id]: { ...d, resolved: !d.resolved } } })
+                               }}
                               className={`flex items-center gap-2 text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl transition-all ${
                                 !d.resolved 
                                   ? 'bg-rose-50 text-rose-600 ring-2 ring-rose-500/20' 
@@ -591,7 +631,7 @@ export default function CondutorRPI() {
               </label>
               <textarea 
                 value={duvidasOutras} 
-                onChange={(e) => setDuvidasOutras(e.target.value)} 
+                 onChange={(e) => updateData({ duvidasOutras: e.target.value })} 
                 rows={3} 
                 className="w-full bg-slate-800/50 border border-slate-700 text-white rounded-2xl px-5 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-teal-500/20 transition-all placeholder-slate-600"
                 placeholder="Exemplo: Parceiro comentou sobre nova estratégia de expansão..." 
@@ -652,7 +692,7 @@ export default function CondutorRPI() {
               </label>
               <textarea 
                 value={andamentoNotes} 
-                onChange={(e) => setAndamentoNotes(e.target.value)} 
+                 onChange={(e) => updateData({ andamentoNotes: e.target.value })} 
                 rows={4} 
                 className="w-full bg-white border border-slate-200 rounded-3xl px-6 py-5 text-sm focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all shadow-sm font-medium"
                 placeholder="Registre pontos específicos discutidos sobre leads em andamento..." 
@@ -777,7 +817,7 @@ export default function CondutorRPI() {
                 </label>
                 <textarea 
                   value={indicacoesCompromisso} 
-                  onChange={(e) => setIndicacoesCompromisso(e.target.value)} 
+                   onChange={(e) => updateData({ indicacoesCompromisso: e.target.value })} 
                   rows={3} 
                   className="w-full bg-slate-800/50 border border-slate-700 text-white rounded-2xl px-6 py-5 text-sm focus:outline-none focus:ring-4 focus:ring-teal-500/20 transition-all font-medium placeholder-slate-600"
                   placeholder='Defina o próximo passo... Ex: "Mapear top 5 players de agronegócio na região"' 

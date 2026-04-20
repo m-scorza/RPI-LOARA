@@ -1,71 +1,108 @@
 import { create } from 'zustand'
-import type { RPI } from '../types/database'
+import { persist } from 'zustand/middleware'
+import type { RPI, Lead, FunilVendasSnapshot } from '../types/database'
 
 interface RPIStoreState {
-  currentRPI: Partial<RPI> | null
-  currentBlock: number
-  startTime: number | null
+  // Session Status
   isRunning: boolean
+  parceiroId: string | null
+  startTime: number | null
+  currentBlockId: string
+  rpiId: string | null
+  rpiNum: number | null
 
-  setBlock: (n: number) => void
-  startMeeting: () => void
-  updateBlock: (blockName: string, data: Record<string, unknown>) => void
-  setNotasGerais: (text: string) => void
-  setProximaRPI: (date: string) => void
-  reset: () => void
+  // Funnel Data
+  funilRitmo: number
+  funilSnapshot: FunilVendasSnapshot | null
+
+  // Blocks Data
+  duvidas: Record<string, { checked: boolean; notes: string; resolved: boolean }>
+  duvidasOutras: string
+  andamentoNotes: string
+  indicacoesCompromisso: string
+  newLeads: Lead[]
+  
+  // Action Plan
+  previousAcoesStatus: Record<string, string>
+  newAcoes: Array<{
+    descricao: string; 
+    responsavel: 'Parceiro' | 'Loara'; 
+    prazo: string; 
+    prioridade: 'baixa' | 'média' | 'alta'; 
+    categoria: string 
+  }>
+
+  // Finalization
+  notasGerais: string
+  proximaRPI: string
+
+  // Actions
+  startSession: (pId: string, rpiId: string, rpiNum: number) => void
+  updateData: (data: Partial<Omit<RPIStoreState, 'startSession' | 'completeSession' | 'updateData' | 'setCurrentBlock'>>) => void
+  setCurrentBlock: (id: string) => void
+  completeSession: () => void
 }
 
-export const useRPIStore = create<RPIStoreState>()((set) => ({
-  currentRPI: null,
-  currentBlock: 0,
-  startTime: null,
-  isRunning: false,
-
-  setBlock: (n: number) => {
-    if (n < 0 || n > 6) return
-    set({ currentBlock: n })
-  },
-
-  startMeeting: () => {
-    set({ startTime: Date.now(), isRunning: true, currentBlock: 1 })
-  },
-
-  updateBlock: (blockName: string, data: Record<string, unknown>) => {
-    set((state) => ({
-      currentRPI: {
-        ...state.currentRPI,
-        [blockName]: {
-          ...((state.currentRPI?.[blockName as keyof RPI] as Record<string, unknown>) || {}),
-          ...data,
-        },
-      },
-    }))
-  },
-
-  setNotasGerais: (text: string) => {
-    set((state) => ({
-      currentRPI: {
-        ...state.currentRPI,
-        notas_gerais: text,
-      },
-    }))
-  },
-
-  setProximaRPI: (date: string) => {
-    set((state) => ({
-      currentRPI: {
-        ...state.currentRPI,
-        proxima_rpi_prevista: date,
-      },
-    }))
-  },
-
-  reset: () => {
-    set({
-      currentRPI: null,
-      currentBlock: 0,
-      startTime: null,
+export const useRPIStore = create<RPIStoreState>()(
+  persist(
+    (set) => ({
       isRunning: false,
-    })
-  },
-}))
+      parceiroId: null,
+      startTime: null,
+      currentBlockId: 'prep',
+      rpiId: null,
+      rpiNum: null,
+
+      funilRitmo: 1,
+      funilSnapshot: null,
+
+      duvidas: {},
+      duvidasOutras: '',
+      andamentoNotes: '',
+      indicacoesCompromisso: '',
+      newLeads: [],
+
+      previousAcoesStatus: {},
+      newAcoes: [],
+
+      notasGerais: '',
+      proximaRPI: '',
+
+      startSession: (pId, rpiId, rpiNum) => set({
+        isRunning: true,
+        parceiroId: pId,
+        rpiId,
+        rpiNum,
+        startTime: Date.now(),
+        currentBlockId: 'duvidas', // Move to first real block after start
+      }),
+
+      updateData: (data) => set((state) => ({ ...state, ...data })),
+
+      setCurrentBlock: (id) => set({ currentBlockId: id }),
+
+      completeSession: () => set({
+        isRunning: false,
+        parceiroId: null,
+        startTime: null,
+        currentBlockId: 'prep',
+        rpiId: null,
+        rpiNum: null,
+        funilRitmo: 1,
+        funilSnapshot: null,
+        duvidas: {},
+        duvidasOutras: '',
+        andamentoNotes: '',
+        indicacoesCompromisso: '',
+        newLeads: [],
+        previousAcoesStatus: {},
+        newAcoes: [],
+        notasGerais: '',
+        proximaRPI: '',
+      }),
+    }),
+    {
+      name: 'rpi-session-storage',
+    }
+  )
+)
