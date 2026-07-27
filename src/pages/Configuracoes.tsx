@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Save, Lock, TrendingUp, DollarSign, Percent, Sparkles, Sliders, ShieldCheck } from 'lucide-react'
+import { Save, Lock, TrendingUp, DollarSign, Percent, Sparkles, Sliders, ShieldCheck } from 'lucide-react'
 import { useSettings, type SystemSettings } from '../hooks/useSettings'
 import { toast } from 'sonner'
 
