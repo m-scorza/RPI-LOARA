@@ -223,7 +223,7 @@ export default function CondutorRPI() {
   const { leads, createLead, moveLead } = useLeads(parceiroId || '')
   const { rpis, createRPI, updateRPI, getLastRPI } = useRPIs(parceiroId || '')
   const { getPendingAcoes, createAcao, updateAcao } = useAcoes({ parceiroId: parceiroId || '' })
-  const { acompHistorico } = useAcompanhamento(parceiroId || '')
+  const { historico: acompHistorico } = useAcompanhamento(parceiroId || '')
   const { playbooks } = usePlaybooks()
   const { settings } = useSettings()
 
@@ -712,7 +712,7 @@ export default function CondutorRPI() {
                       notas_gerais: andamentoNotes,
                       proxima_rpi_prevista: proximaRpiDate
                     }}
-                    acoes={[...previousAcoes.map(a => ({ ...a, status: previousAcoesStatus[a.id] || a.status })), ...newAcoes]}
+                    acoes={[...previousAcoes.map(a => ({ ...a, status: (previousAcoesStatus[a.id] || a.status) as Acao['status'] })), ...newAcoes]}
                     leads={leads}
                     discussionNotes={andamentoNotes}
                   />
