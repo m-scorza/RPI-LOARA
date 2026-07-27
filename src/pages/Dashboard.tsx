@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   Cell
 } from 'recharts'
-import { Calendar, Users, TrendingUp, ArrowRight, Sparkles, Target } from 'lucide-react'
+import { Calendar, TrendingUp, ArrowRight, Sparkles, Target } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 export default function Dashboard() {
