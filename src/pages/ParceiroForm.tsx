@@ -44,6 +44,7 @@ export default function ParceiroForm({ parceiro, onClose, onSave }: ParceiroForm
   const set = (field: string, value: string | number) => setForm((f) => ({ ...f, [field]: value }))
 
   // Live revenue projection based on current form values
+  const projection = useMemo(() => {
     const loaraNet = form.taxa_loara * 0.78
     const share = form.categoria === 'Ouro' ? 0.40 : form.categoria === 'Prata' ? 0.30 : 0
     const partnerGross = loaraNet * share
