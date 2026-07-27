@@ -13,6 +13,7 @@ export interface SystemSettings {
   conv_oportunidade_cliente: number
   conv_cliente_doc: number
   conv_doc_credito: number
+  tempo_medio_fechamento: number
   app_pin: string
 }
 
@@ -29,6 +30,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   conv_oportunidade_cliente: 0.65,
   conv_cliente_doc: 0.80,
   conv_doc_credito: 0.85,
+  tempo_medio_fechamento: 120,
   app_pin: '1234'
 }
 
