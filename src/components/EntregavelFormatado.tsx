@@ -203,7 +203,7 @@ function PlanoFormatado({ parceiro, rpiData, acoes }: EntregavelProps) {
   )
 }
 
-function RelatorioFormatado({ parceiro, rpiData, leads, acoes }: EntregavelProps) {
+function RelatorioFormatado({ parceiro, rpiData, leads }: EntregavelProps) {
   const proj = calculateRevenueProjection(parceiro)
   const activeLeads = leads.filter((l) => l.status === 'Ativo')
   const totalPipeline = activeLeads.reduce((s, l) => s + (l.demanda || 0), 0)
