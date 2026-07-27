@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Search, Users, Pencil, Trash2, Filter, MoreHorizontal, ChevronRight } from 'lucide-react'
+import { Plus, Search, Users, Pencil, Trash2, Filter, ChevronRight } from 'lucide-react'
 import { useParceiros } from '../hooks/useParceiros'
 import type { Parceiro, Categoria } from '../types/database'
 import EmptyState from '../components/EmptyState'
@@ -20,7 +20,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function ParceirosLista() {
   const { parceiros, loading, createParceiro, updateParceiro, deleteParceiro } = useParceiros()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   
   const [showForm, setShowForm] = useState(false)
