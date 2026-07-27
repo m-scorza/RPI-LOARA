@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Lead, FunilVendasSnapshot } from '../types/database'
+import type { Lead, FunilVendasSnapshot, Responsavel, Prioridade, CategoriaAcao } from '../types/database'
 
 interface RPIStoreState {
   // Session Status
@@ -27,10 +27,10 @@ interface RPIStoreState {
   previousAcoesStatus: Record<string, string>
   newAcoes: Array<{
     descricao: string; 
-    responsavel: 'Parceiro' | 'Loara'; 
+    responsavel: Responsavel;
     prazo: string; 
-    prioridade: 'baixa' | 'média' | 'alta'; 
-    categoria: string 
+    prioridade: Prioridade;
+    categoria: CategoriaAcao
   }>
 
   // Finalization
