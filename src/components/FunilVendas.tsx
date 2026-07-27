@@ -3,7 +3,7 @@ import { Users, Phone, Handshake, TrendingUp, CheckCircle2, AlertCircle } from '
 import type { Parceiro, FunilVendasSnapshot } from '../types/database'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
 import { formatCurrency } from '../lib/format'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 interface FunilVendasProps {
   parceiro: Parceiro
