@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { Parceiro, Lead, Acao, RPI } from '../types/database'
+import type { Parceiro, Lead, RPI } from '../types/database'
 import { generateHubSpotText, generatePlanoAcaoText, generateRelatorioText } from './generators'
 
 const anthropic = new Anthropic({
