@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -13,7 +14,6 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { GERENTE_NOME } from '../lib/format'
 import { isSupabaseConfigured, localParceiros, localRPIs } from '../lib/localStore'
-import { supabase } from '../lib/supabase'
 
 interface Notification {
   id: string
