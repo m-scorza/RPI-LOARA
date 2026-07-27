@@ -51,15 +51,15 @@ export function useDashboard() {
     try {
       if (!isSupabaseConfigured) {
         // Import local storage tools dynamically or use existing ones
-        const { localParceiros, localLeads, localRPIs, localAcompanhamento } = await import('../lib/localStore')
+        const { localParceiros, localLeads, localAcompanhamento } = await import('../lib/localStore')
         
         const parceiros = localParceiros.selectAll().filter(p => p.status === 'ativo')
         const leads = localLeads.selectAll()
         const historical = localAcompanhamento.selectAll()
         
         const activeLeads = leads.filter(l => l.status === 'Ativo')
-        const totalCreditoTomado = historical.reduce((acc, curr) => acc + (curr.credito_tomado || 0), 0)
-        const totalComissao = historical.reduce((acc, curr) => acc + (curr.comissao_recebida || 0), 0)
+        const totalCreditoTomado = historical.reduce((acc, curr) => acc + (curr.creditos_tomados || 0), 0)
+        const totalComissao = historical.reduce((acc, curr) => acc + (curr.comissao_realizada || 0), 0)
 
         const funnelCounts = activeLeads.reduce((acc, curr) => {
           const etapa = curr.etapa.toLowerCase().replace(' ', '_') as keyof DashboardStats['funnel']
@@ -78,7 +78,7 @@ export function useDashboard() {
           const monthData = historical.filter(h => h.mes === m.month && h.ano === m.year)
           return {
             name: m.name,
-            total: monthData.reduce((acc, curr) => acc + (curr.credito_tomado || 0), 0)
+            total: monthData.reduce((acc, curr) => acc + (curr.creditos_tomados || 0), 0)
           }
         })
 
