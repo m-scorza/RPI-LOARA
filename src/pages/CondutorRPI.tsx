@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus, ChevronRight, HelpCircle, BookOpen, Activity, Target, Zap, Layout as LayoutIcon, ClipboardList, Flag, Users, ShieldCheck, TrendingUp, AlertCircle, Download } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Play, Clock, Check, X, Plus, BookOpen, Activity, Target, Zap, Layout as LayoutIcon, ClipboardList, Flag, Users, ShieldCheck, TrendingUp, AlertCircle, Download, CheckCircle2, FileText, Trash2 } from 'lucide-react'
 import { useRPIStore } from '../stores/rpiStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -12,8 +12,8 @@ import { useAcompanhamento } from '../hooks/useAcompanhamento'
 import { usePlaybooks } from '../hooks/usePlaybooks'
 import { useSettings } from '../hooks/useSettings'
 import { formatCurrency, formatDate } from '../lib/format'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts'
-import { useForm } from 'react-hook-form'
+import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -22,7 +22,7 @@ import jsPDF from 'jspdf'
 import { generateHubSpotText, generatePlanoAcaoText, generateRelatorioText } from '../lib/generators'
 import { generateWithAI, type DeliverableType } from '../lib/aiGenerators'
 import { calculateRevenueProjection } from '../lib/revenueEngine'
-import type { Parceiro, Lead, Acao, Responsavel, Prioridade, CategoriaAcao, FunilVendasSnapshot, Playbook } from '../types/database'
+import type { Parceiro, Lead, Acao, RPI, FunilVendasSnapshot, Playbook } from '../types/database'
 import { ETAPAS_FUNIL } from '../types/database'
 import PipelineKanban from '../components/PipelineKanban'
 import ActionList from '../components/ActionList'
@@ -178,7 +178,7 @@ export default function CondutorRPI() {
     reset: resetLeadForm,
     formState: { errors: leadErrors }
   } = useForm<LeadFormData>({
-    resolver: zodResolver(LeadFormSchema),
+    resolver: zodResolver(LeadFormSchema) as unknown as Resolver<LeadFormData>,
     defaultValues: { dentro_farege: true }
   })
 
@@ -214,6 +214,10 @@ export default function CondutorRPI() {
     hubspot: ''
   })
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+  const [exportType, setExportType] = useState<'plano' | 'relatorio' | 'hubspot'>('plano')
+  const [showEntregaveis, setShowEntregaveis] = useState(false)
+  const setNotasGerais = (value: string) => updateData({ notasGerais: value })
+  const setProximaRPI = (value: string) => updateData({ proximaRPI: value })
 
   const { getParceiro } = useParceiros()
   const { leads, createLead, moveLead } = useLeads(parceiroId || '')
@@ -384,6 +388,11 @@ export default function CondutorRPI() {
     notas_gerais: notasGerais,
     proxima_rpi_prevista: proximaRPI,
   }
+  const nextRpiNumber = rpiNum || rpis.length + 1
+  const proximaRpiDate = proximaRPI
+  const planoText = parceiro ? (generatedTexts.plano_acao || generatePlanoAcaoText(parceiro, rpiData, allAcoes)) : ''
+  const hubspotText = parceiro ? (generatedTexts.hubspot || generateHubSpotText(parceiro, rpiData, allAcoes, leads, andamentoNotes)) : ''
+  const relatorioText = parceiro ? (generatedTexts.relatorio || generateRelatorioText(parceiro, rpiData, leads, allAcoes)) : ''
 
   const handleGenerateAI = async (forceType?: DeliverableType) => {
     if (!parceiro) return
@@ -528,7 +537,6 @@ export default function CondutorRPI() {
 
   if (!parceiro) return <div className="text-center py-12 text-slate-400">Carregando...</div>
 
-  const inputCls = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500'
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
@@ -1093,7 +1101,7 @@ export default function CondutorRPI() {
                             }}
                           />
                           <Bar dataKey="valor" radius={[6, 6, 6, 6]} barSize={32}>
-                            {acompHistorico.map((_, index) => (
+                            {acompHistorico.map((_: unknown, index: number) => (
                               <Cell key={`cell-${index}`} fill={index === acompHistorico.length - 1 ? '#2DD4BF' : '#F1F5F9'} />
                             ))}
                           </Bar>
@@ -1218,7 +1226,7 @@ export default function CondutorRPI() {
                     <Zap size={14} className="fill-violet-400" /> Sugestões Inteligentes
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {unresolved.map(([id, d]) => {
+                    {unresolved.map(([id]) => {
                       const item = DUVIDAS_CHECKLIST.find(i => i.id === id)
                       return (
                         <div key={id} className="flex items-center justify-between bg-white/80 backdrop-blur-sm border border-violet-100 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all group">
@@ -1338,7 +1346,7 @@ export default function CondutorRPI() {
                         {a.categoria === 'indicação' ? <TrendingUp size={24} /> :
                          a.categoria === 'documentação' ? <FileText size={24} /> :
                          a.categoria === 'treinamento' ? <Zap size={24} /> :
-                         a.categoria === 'processo' ? <Layout size={24} /> :
+                         a.categoria === 'processo' ? <LayoutIcon size={24} /> :
                          <Activity size={24} />}
                       </div>
                        <div className="flex-1">
