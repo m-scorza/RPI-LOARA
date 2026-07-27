@@ -22,7 +22,6 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  Legend 
 } from 'recharts'
 
 const CATEGORIA_STYLES: Record<Categoria, string> = {
